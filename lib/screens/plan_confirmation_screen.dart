@@ -1,6 +1,6 @@
 import 'package:flutter/material.dart';
 
-import 'today_dashboard_screen.dart';
+import 'dashboard_navigation_screen.dart';
 
 class PlanConfirmationScreen extends StatelessWidget {
   const PlanConfirmationScreen({
@@ -176,22 +176,22 @@ class PlanConfirmationScreen extends StatelessWidget {
   }
 
   void _confirm(BuildContext context) {
-  Navigator.of(context).pushAndRemoveUntil(
-    MaterialPageRoute<void>(
-      builder: (context) => TodayDashboardScreen(
-        isBangla: isBangla,
-        goal: goal,
-        targetCaloriesMin: targetCaloriesMin,
-        targetCaloriesMax: targetCaloriesMax,
-        schedule: schedule,
-        activity: activity,
-        sleep: sleep,
-        budget: budget,
+    Navigator.of(context).pushAndRemoveUntil(
+      MaterialPageRoute<void>(
+        builder: (context) => DashboardNavigationScreen(
+          isBangla: isBangla,
+          goal: goal,
+          targetCaloriesMin: targetCaloriesMin,
+          targetCaloriesMax: targetCaloriesMax,
+          schedule: schedule,
+          activity: activity,
+          sleep: sleep,
+          budget: budget,
+        ),
       ),
-    ),
-    (route) => false,
-  );
-}
+      (route) => false,
+    );
+  }
 
   @override
   Widget build(BuildContext context) {
