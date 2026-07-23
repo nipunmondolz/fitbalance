@@ -1,5 +1,7 @@
 import 'package:flutter/material.dart';
 
+import 'assessment_result_screen.dart';
+
 class LifestyleAssessmentScreen extends StatefulWidget {
   const LifestyleAssessmentScreen({
     required this.isBangla,
@@ -52,17 +54,22 @@ class _LifestyleAssessmentScreenState extends State<LifestyleAssessmentScreen> {
       return;
     }
 
-    ScaffoldMessenger.of(context)
-      ..hideCurrentSnackBar()
-      ..showSnackBar(
-        SnackBar(
-          content: Text(
-            widget.isBangla
-                ? 'জীবনযাপনের তথ্য সফলভাবে সংরক্ষণ করা হয়েছে'
-                : 'Lifestyle information has been saved successfully',
-          ),
+    Navigator.of(context).push(
+      MaterialPageRoute<void>(
+        builder: (context) => AssessmentResultScreen(
+          isBangla: widget.isBangla,
+          age: widget.age,
+          gender: widget.gender,
+          heightInCm: widget.heightInCm,
+          weightInKg: widget.weightInKg,
+          goal: widget.goal,
+          schedule: _selectedSchedule!,
+          activity: _selectedActivity!,
+          sleep: _selectedSleep!,
+          budget: _selectedBudget!,
         ),
-      );
+      ),
+    );
   }
 
   @override
