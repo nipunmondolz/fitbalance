@@ -1,4 +1,5 @@
 import 'package:flutter/material.dart';
+import 'goal_selection_screen.dart';
 
 class PersonalInfoScreen extends StatefulWidget {
   const PersonalInfoScreen({required this.isBangla, super.key});
@@ -211,18 +212,21 @@ class _PersonalInfoScreenState extends State<PersonalInfoScreen> {
 
     final heightInCm = _getHeightInCm();
 
-    ScaffoldMessenger.of(context)
-      ..hideCurrentSnackBar()
-      ..showSnackBar(
-        SnackBar(
-          content: Text(
-            widget.isBangla
-                ? 'তথ্য যাচাই সফল—উচ্চতা ${heightInCm.toStringAsFixed(1)} সেমি'
-                : 'Information validated—height '
-                      '${heightInCm.toStringAsFixed(1)} cm',
-          ),
+    final age = int.parse(_normalizeNumber(_ageController.text));
+
+    final weightInKg = double.parse(_normalizeNumber(_weightController.text));
+
+    Navigator.of(context).push(
+      MaterialPageRoute<void>(
+        builder: (context) => GoalSelectionScreen(
+          isBangla: widget.isBangla,
+          age: age,
+          gender: _selectedGender!,
+          heightInCm: heightInCm,
+          weightInKg: weightInKg,
         ),
-      );
+      ),
+    );
   }
 
   @override
