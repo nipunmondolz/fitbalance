@@ -1,5 +1,7 @@
 import 'package:flutter/material.dart';
 
+import 'lifestyle_assessment_screen.dart';
+
 class GoalSelectionScreen extends StatefulWidget {
   const GoalSelectionScreen({
     required this.isBangla,
@@ -39,17 +41,18 @@ class _GoalSelectionScreenState extends State<GoalSelectionScreen> {
       return;
     }
 
-    ScaffoldMessenger.of(context)
-      ..hideCurrentSnackBar()
-      ..showSnackBar(
-        SnackBar(
-          content: Text(
-            widget.isBangla
-                ? 'আপনার লক্ষ্য সফলভাবে সংরক্ষণ করা হয়েছে'
-                : 'Your goal has been saved successfully',
-          ),
+    Navigator.of(context).push(
+      MaterialPageRoute<void>(
+        builder: (context) => LifestyleAssessmentScreen(
+          isBangla: widget.isBangla,
+          age: widget.age,
+          gender: widget.gender,
+          heightInCm: widget.heightInCm,
+          weightInKg: widget.weightInKg,
+          goal: _selectedGoal!,
         ),
-      );
+      ),
+    );
   }
 
   @override
