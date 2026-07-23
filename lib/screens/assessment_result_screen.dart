@@ -2,6 +2,8 @@ import 'dart:math' as math;
 
 import 'package:flutter/material.dart';
 
+import 'plan_confirmation_screen.dart';
+
 class AssessmentResultScreen extends StatelessWidget {
   const AssessmentResultScreen({
     required this.isBangla,
@@ -233,17 +235,22 @@ class AssessmentResultScreen extends StatelessWidget {
   }
 
   void _continue(BuildContext context) {
-    ScaffoldMessenger.of(context)
-      ..hideCurrentSnackBar()
-      ..showSnackBar(
-        SnackBar(
-          content: Text(
-            isBangla
-                ? 'আপনার মূল্যায়ন সফলভাবে প্রস্তুত হয়েছে'
-                : 'Your assessment is ready',
-          ),
+    final targetRange = _targetCalorieRange;
+
+    Navigator.of(context).push(
+      MaterialPageRoute<void>(
+        builder: (context) => PlanConfirmationScreen(
+          isBangla: isBangla,
+          goal: goal,
+          targetCaloriesMin: targetRange[0].round(),
+          targetCaloriesMax: targetRange[1].round(),
+          schedule: schedule,
+          activity: activity,
+          sleep: sleep,
+          budget: budget,
         ),
-      );
+      ),
+    );
   }
 
   @override
