@@ -1,4 +1,5 @@
 import 'package:flutter/material.dart';
+import 'consent_screen.dart';
 
 class WelcomeScreen extends StatefulWidget {
   const WelcomeScreen({super.key});
@@ -112,17 +113,12 @@ class _WelcomeScreenState extends State<WelcomeScreen> {
                 height: 52,
                 child: FilledButton(
                   onPressed: () {
-                    ScaffoldMessenger.of(context)
-                      ..hideCurrentSnackBar()
-                      ..showSnackBar(
-                        SnackBar(
-                          content: Text(
-                            _isBangla
-                                ? 'পরবর্তী ধাপ: সম্মতি ও নিরাপত্তা নির্দেশনা'
-                                : 'Next: consent and safety guidance',
-                          ),
-                        ),
-                      );
+                    Navigator.of(context).push(
+                      MaterialPageRoute<void>(
+                        builder: (context) =>
+                            ConsentScreen(isBangla: _isBangla),
+                      ),
+                    );
                   },
                   child: Text(
                     _isBangla ? 'শুরু করুন' : 'Get started',
