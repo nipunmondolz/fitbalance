@@ -1,5 +1,7 @@
 import 'package:flutter/material.dart';
 
+import 'personal_info_screen.dart';
+
 class ConsentScreen extends StatefulWidget {
   const ConsentScreen({required this.isBangla, super.key});
 
@@ -107,17 +109,12 @@ class _ConsentScreenState extends State<ConsentScreen> {
                 child: FilledButton(
                   onPressed: _hasAccepted
                       ? () {
-                          ScaffoldMessenger.of(context)
-                            ..hideCurrentSnackBar()
-                            ..showSnackBar(
-                              SnackBar(
-                                content: Text(
-                                  isBangla
-                                      ? 'পরবর্তী ধাপ: ব্যক্তিগত তথ্য সংগ্রহ'
-                                      : 'Next: personal information',
-                                ),
-                              ),
-                            );
+                          Navigator.of(context).push(
+                            MaterialPageRoute<void>(
+                              builder: (context) =>
+                                  PersonalInfoScreen(isBangla: isBangla),
+                            ),
+                          );
                         }
                       : null,
                   child: Text(
