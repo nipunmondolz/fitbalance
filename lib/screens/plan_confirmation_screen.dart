@@ -1,5 +1,7 @@
 import 'package:flutter/material.dart';
 
+import 'today_dashboard_screen.dart';
+
 class PlanConfirmationScreen extends StatelessWidget {
   const PlanConfirmationScreen({
     required this.isBangla,
@@ -174,18 +176,22 @@ class PlanConfirmationScreen extends StatelessWidget {
   }
 
   void _confirm(BuildContext context) {
-    ScaffoldMessenger.of(context)
-      ..hideCurrentSnackBar()
-      ..showSnackBar(
-        SnackBar(
-          content: Text(
-            isBangla
-                ? 'আপনার পরিকল্পনা নিশ্চিত করা হয়েছে'
-                : 'Your plan has been confirmed',
-          ),
-        ),
-      );
-  }
+  Navigator.of(context).pushAndRemoveUntil(
+    MaterialPageRoute<void>(
+      builder: (context) => TodayDashboardScreen(
+        isBangla: isBangla,
+        goal: goal,
+        targetCaloriesMin: targetCaloriesMin,
+        targetCaloriesMax: targetCaloriesMax,
+        schedule: schedule,
+        activity: activity,
+        sleep: sleep,
+        budget: budget,
+      ),
+    ),
+    (route) => false,
+  );
+}
 
   @override
   Widget build(BuildContext context) {
