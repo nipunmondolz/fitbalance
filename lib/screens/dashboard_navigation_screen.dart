@@ -1,5 +1,6 @@
 import 'package:flutter/material.dart';
 
+import 'daily_log_screen.dart';
 import 'today_dashboard_screen.dart';
 
 class DashboardNavigationScreen extends StatefulWidget {
@@ -50,13 +51,10 @@ class _DashboardNavigationScreenState extends State<DashboardNavigationScreen> {
         sleep: widget.sleep,
         budget: widget.budget,
       ),
-      _DashboardPlaceholderScreen(
-        icon: Icons.restaurant_menu,
-        title: isBangla ? 'দৈনিক লগ' : 'Daily log',
-        description: isBangla
-            ? 'খাবার, ব্যায়াম ও দৈনিক অভ্যাস এখানে যোগ এবং পর্যবেক্ষণ করা যাবে।'
-            : 'Meals, activities, and daily habits will be added and monitored here.',
+      DailyLogScreen(
         isBangla: isBangla,
+        targetCaloriesMin: widget.targetCaloriesMin,
+        targetCaloriesMax: widget.targetCaloriesMax,
       ),
       _DashboardPlaceholderScreen(
         icon: Icons.event_note_outlined,
