@@ -1,8 +1,10 @@
 import 'package:flutter/material.dart';
 
-enum _LogType { meal, water, exercise, sleep }
+enum _LogType { meal, water, softDrink, exercise, sleep }
 
 enum _MealTime { morning, noon, afternoon, night }
+
+enum _DrinkType { water, softDrink }
 
 class _DailyLogEntry {
   const _DailyLogEntry({
@@ -378,7 +380,6 @@ class DailyLogScreen extends StatefulWidget {
 
 class _DailyLogScreenState extends State<DailyLogScreen> {
   final List<_DailyLogEntry> _entries = [];
-  int _selectedWaterGlasses = 1;
 
   int get _calories => _entries
       .where((entry) => entry.type == _LogType.meal)
@@ -386,6 +387,10 @@ class _DailyLogScreenState extends State<DailyLogScreen> {
 
   int get _waterGlasses => _entries
       .where((entry) => entry.type == _LogType.water)
+      .fold(0, (total, entry) => total + entry.amount.round());
+
+  int get _softDrinkMl => _entries
+      .where((entry) => entry.type == _LogType.softDrink)
       .fold(0, (total, entry) => total + entry.amount.round());
 
   int get _exerciseMinutes => _entries
@@ -405,6 +410,8 @@ class _DailyLogScreenState extends State<DailyLogScreen> {
         return widget.isBangla
             ? '$glasses গ্লাস'
             : '$glasses ${glasses == 1 ? 'glass' : 'glasses'}';
+      case _LogType.softDrink:
+        return '${entry.amount.round()} ml';
       case _LogType.exercise:
         return widget.isBangla
             ? '${entry.amount.round()} মিনিট'
@@ -422,6 +429,8 @@ class _DailyLogScreenState extends State<DailyLogScreen> {
         return Icons.restaurant;
       case _LogType.water:
         return Icons.water_drop;
+      case _LogType.softDrink:
+        return Icons.local_drink;
       case _LogType.exercise:
         return Icons.directions_run;
       case _LogType.sleep:
@@ -450,41 +459,169 @@ class _DailyLogScreenState extends State<DailyLogScreen> {
     }
   }
 
-  void _addWater() {
-    final glasses = _selectedWaterGlasses;
+  Future<void> _showDrinkPicker() async {
+    const waterOptions = [1, 2, 3, 4, 5, 6, 8];
+    const softDrinkOptions = [250, 330, 500, 1000, 1500, 2000];
 
-    setState(() {
-      _entries.insert(
-        0,
-        _DailyLogEntry(
-          type: _LogType.water,
-          title: widget.isBangla ? 'পানি' : 'Water',
-          amount: glasses.toDouble(),
-          details: widget.isBangla ? 'আজ' : 'Today',
-        ),
-      );
-      _selectedWaterGlasses = 1;
-    });
-  }
+    var selectedType = _DrinkType.water;
+    var selectedWaterGlasses = 1;
+    var selectedSoftDrinkMl = 330;
 
-  void _decreaseWater() {
-    if (_selectedWaterGlasses <= 1) {
-      return;
+    final entry = await showModalBottomSheet<_DailyLogEntry>(
+      context: context,
+      isScrollControlled: true,
+      showDragHandle: true,
+      builder: (sheetContext) {
+        return StatefulBuilder(
+          builder: (context, setSheetState) {
+            final isWater = selectedType == _DrinkType.water;
+
+            return SafeArea(
+              child: SingleChildScrollView(
+                padding: const EdgeInsets.fromLTRB(16, 0, 16, 24),
+                child: Column(
+                  mainAxisSize: MainAxisSize.min,
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  children: [
+                    Text(
+                      widget.isBangla ? 'পানীয় যোগ করুন' : 'Add a drink',
+                      style: Theme.of(context).textTheme.titleLarge?.copyWith(
+                        fontWeight: FontWeight.bold,
+                      ),
+                    ),
+                    const SizedBox(height: 6),
+                    Text(
+                      widget.isBangla
+                          ? 'পানি অথবা কোমল পানীয় নির্বাচন করুন।'
+                          : 'Choose water or a soft drink.',
+                    ),
+                    const SizedBox(height: 18),
+                    Text(
+                      widget.isBangla ? 'পানীয়ের ধরন' : 'Drink type',
+                      style: Theme.of(context).textTheme.titleMedium?.copyWith(
+                        fontWeight: FontWeight.bold,
+                      ),
+                    ),
+                    const SizedBox(height: 10),
+                    Wrap(
+                      spacing: 10,
+                      runSpacing: 10,
+                      children: [
+                        ChoiceChip(
+                          avatar: const Icon(Icons.water_drop_outlined),
+                          label: Text(widget.isBangla ? 'পানি' : 'Water'),
+                          selected: selectedType == _DrinkType.water,
+                          onSelected: (_) {
+                            setSheetState(() {
+                              selectedType = _DrinkType.water;
+                            });
+                          },
+                        ),
+                        ChoiceChip(
+                          avatar: const Icon(Icons.local_drink),
+                          label: Text(
+                            widget.isBangla ? 'কোমল পানীয়' : 'Soft drink',
+                          ),
+                          selected: selectedType == _DrinkType.softDrink,
+                          onSelected: (_) {
+                            setSheetState(() {
+                              selectedType = _DrinkType.softDrink;
+                            });
+                          },
+                        ),
+                      ],
+                    ),
+                    const SizedBox(height: 22),
+                    Text(
+                      isWater
+                          ? (widget.isBangla ? 'কত গ্লাস?' : 'How many glasses?')
+                          : (widget.isBangla ? 'কত মিলিলিটার?' : 'How many millilitres?'),
+                      style: Theme.of(context).textTheme.titleMedium?.copyWith(
+                        fontWeight: FontWeight.bold,
+                      ),
+                    ),
+                    const SizedBox(height: 10),
+                    Wrap(
+                      spacing: 8,
+                      runSpacing: 8,
+                      children: isWater
+                          ? waterOptions.map((glasses) {
+                              return ChoiceChip(
+                                label: Text(
+                                  widget.isBangla
+                                      ? '$glasses গ্লাস'
+                                      : '$glasses ${glasses == 1 ? 'glass' : 'glasses'}',
+                                ),
+                                selected: selectedWaterGlasses == glasses,
+                                onSelected: (_) {
+                                  setSheetState(() {
+                                    selectedWaterGlasses = glasses;
+                                  });
+                                },
+                              );
+                            }).toList()
+                          : softDrinkOptions.map((amountMl) {
+                              return ChoiceChip(
+                                label: Text('$amountMl ml'),
+                                selected: selectedSoftDrinkMl == amountMl,
+                                onSelected: (_) {
+                                  setSheetState(() {
+                                    selectedSoftDrinkMl = amountMl;
+                                  });
+                                },
+                              );
+                            }).toList(),
+                    ),
+                    if (!isWater) ...[
+                      const SizedBox(height: 16),
+                      Text(
+                        widget.isBangla
+                            ? 'এখানে শুধু পানীয়ের পরিমাণ রেকর্ড হবে।'
+                            : 'Only the drink amount will be recorded here.',
+                        style: Theme.of(context).textTheme.bodySmall,
+                      ),
+                    ],
+                    const SizedBox(height: 24),
+                    SizedBox(
+                      width: double.infinity,
+                      child: FilledButton.icon(
+                        onPressed: () {
+                          Navigator.pop(
+                            sheetContext,
+                            _DailyLogEntry(
+                              type: isWater
+                                  ? _LogType.water
+                                  : _LogType.softDrink,
+                              title: isWater
+                                  ? (widget.isBangla ? 'পানি' : 'Water')
+                                  : (widget.isBangla
+                                        ? 'কোমল পানীয়'
+                                        : 'Soft drink'),
+                              amount: isWater
+                                  ? selectedWaterGlasses.toDouble()
+                                  : selectedSoftDrinkMl.toDouble(),
+                              details: widget.isBangla ? 'আজ' : 'Today',
+                            ),
+                          );
+                        },
+                        icon: const Icon(Icons.add),
+                        label: Text(
+                          widget.isBangla ? 'যোগ করুন' : 'Add',
+                        ),
+                      ),
+                    ),
+                  ],
+                ),
+              ),
+            );
+          },
+        );
+      },
+    );
+
+    if (entry != null && mounted) {
+      _insertEntry(entry);
     }
-
-    setState(() {
-      _selectedWaterGlasses--;
-    });
-  }
-
-  void _increaseWater() {
-    if (_selectedWaterGlasses >= 20) {
-      return;
-    }
-
-    setState(() {
-      _selectedWaterGlasses++;
-    });
   }
 
   Future<void> _showExercisePicker() async {
@@ -765,10 +902,10 @@ class _DailyLogScreenState extends State<DailyLogScreen> {
                           value: '$_calories',
                           label: 'kcal',
                         ),
-                        _SummaryItem(
-                          icon: Icons.water_drop,
-                          value: '$_waterGlasses',
-                          label: widget.isBangla ? 'গ্লাস' : 'glasses',
+                        _DrinkSummaryItem(
+                          isBangla: widget.isBangla,
+                          waterGlasses: _waterGlasses,
+                          softDrinkMl: _softDrinkMl,
                         ),
                         _SummaryItem(
                           icon: Icons.directions_run,
@@ -825,14 +962,13 @@ class _DailyLogScreenState extends State<DailyLogScreen> {
                       : 'Food, portion and time',
                   onTap: _showFoodPicker,
                 ),
-                _WaterSelectorCard(
-                  isBangla: widget.isBangla,
-                  glasses: _selectedWaterGlasses,
-                  onDecrease: _selectedWaterGlasses > 1 ? _decreaseWater : null,
-                  onIncrease: _selectedWaterGlasses < 20
-                      ? _increaseWater
-                      : null,
-                  onAdd: _addWater,
+                _QuickActionCard(
+                  icon: Icons.water_drop,
+                  label: widget.isBangla ? 'পানি' : 'Water',
+                  helper: widget.isBangla
+                      ? 'পানি বা কোমল পানীয়'
+                      : 'Water or soft drink',
+                  onTap: _showDrinkPicker,
                 ),
                 _QuickActionCard(
                   icon: Icons.directions_run,
@@ -1518,98 +1654,52 @@ class _SummaryItem extends StatelessWidget {
   }
 }
 
-class _WaterSelectorCard extends StatelessWidget {
-  const _WaterSelectorCard({
+class _DrinkSummaryItem extends StatelessWidget {
+  const _DrinkSummaryItem({
     required this.isBangla,
-    required this.glasses,
-    required this.onDecrease,
-    required this.onIncrease,
-    required this.onAdd,
+    required this.waterGlasses,
+    required this.softDrinkMl,
   });
 
   final bool isBangla;
-  final int glasses;
-  final VoidCallback? onDecrease;
-  final VoidCallback? onIncrease;
-  final VoidCallback onAdd;
+  final int waterGlasses;
+  final int softDrinkMl;
 
   @override
   Widget build(BuildContext context) {
     final theme = Theme.of(context);
-    final colorScheme = theme.colorScheme;
 
-    return Card(
-      margin: EdgeInsets.zero,
-      child: Padding(
-        padding: const EdgeInsets.all(8),
-        child: Column(
-          mainAxisAlignment: MainAxisAlignment.center,
-          children: [
-            Row(
-              mainAxisAlignment: MainAxisAlignment.center,
-              children: [
-                Icon(Icons.water_drop, size: 21, color: colorScheme.primary),
-                const SizedBox(width: 5),
-                Text(
-                  isBangla ? 'পানি' : 'Water',
-                  style: theme.textTheme.labelLarge?.copyWith(
-                    fontWeight: FontWeight.bold,
-                  ),
+    return Row(
+      children: [
+        Icon(Icons.water_drop, color: theme.colorScheme.primary),
+        const SizedBox(width: 10),
+        Expanded(
+          child: Column(
+            mainAxisAlignment: MainAxisAlignment.center,
+            crossAxisAlignment: CrossAxisAlignment.start,
+            children: [
+              Text(
+                isBangla
+                    ? '$waterGlasses গ্লাস পানি'
+                    : '$waterGlasses ${waterGlasses == 1 ? 'glass' : 'glasses'} water',
+                maxLines: 1,
+                overflow: TextOverflow.ellipsis,
+                style: theme.textTheme.labelLarge?.copyWith(
+                  fontWeight: FontWeight.bold,
                 ),
-              ],
-            ),
-            const SizedBox(height: 7),
-            Row(
-              mainAxisAlignment: MainAxisAlignment.center,
-              children: [
-                IconButton.outlined(
-                  onPressed: onDecrease,
-                  tooltip: isBangla ? 'কমিয়ে দিন' : 'Decrease',
-                  icon: const Icon(Icons.remove, size: 18),
-                  padding: EdgeInsets.zero,
-                  constraints: const BoxConstraints.tightFor(
-                    width: 32,
-                    height: 32,
-                  ),
-                ),
-                SizedBox(
-                  width: 34,
-                  child: Text(
-                    '$glasses',
-                    textAlign: TextAlign.center,
-                    style: theme.textTheme.titleMedium?.copyWith(
-                      fontWeight: FontWeight.bold,
-                    ),
-                  ),
-                ),
-                IconButton.outlined(
-                  onPressed: onIncrease,
-                  tooltip: isBangla ? 'বাড়িয়ে দিন' : 'Increase',
-                  icon: const Icon(Icons.add, size: 18),
-                  padding: EdgeInsets.zero,
-                  constraints: const BoxConstraints.tightFor(
-                    width: 32,
-                    height: 32,
-                  ),
-                ),
-                const SizedBox(width: 5),
-                IconButton.filled(
-                  onPressed: onAdd,
-                  tooltip: isBangla
-                      ? '$glasses গ্লাস যোগ করুন'
-                      : 'Add $glasses glasses',
-                  icon: const Icon(Icons.check, size: 18),
-                  padding: EdgeInsets.zero,
-                  constraints: const BoxConstraints.tightFor(
-                    width: 32,
-                    height: 32,
-                  ),
-                ),
-              ],
-            ),
-          ],
+              ),
+              Text(
+                isBangla
+                    ? '$softDrinkMl ml কোমল পানীয়'
+                    : '$softDrinkMl ml soft drink',
+                maxLines: 1,
+                overflow: TextOverflow.ellipsis,
+                style: theme.textTheme.bodySmall,
+              ),
+            ],
+          ),
         ),
-      ),
+      ],
     );
   }
 }
