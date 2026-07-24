@@ -12,6 +12,12 @@ class HabitEngineScreen extends StatefulWidget {
 class _HabitEngineScreenState extends State<HabitEngineScreen> {
   final List<bool> _completedHabits = [false, false, false];
 
+  List<_HabitReminder> _habitReminders = const [
+    _HabitReminder(enabled: false, time: TimeOfDay(hour: 9, minute: 0)),
+    _HabitReminder(enabled: false, time: TimeOfDay(hour: 18, minute: 0)),
+    _HabitReminder(enabled: false, time: TimeOfDay(hour: 22, minute: 30)),
+  ];
+
   _CheckInMood? _checkInMood;
   int? _energyLevel;
   String _checkInNote = '';
@@ -22,6 +28,37 @@ class _HabitEngineScreenState extends State<HabitEngineScreen> {
   double get _progress => _completedCount / _completedHabits.length;
 
   bool get _hasCheckIn => _checkInMood != null && _energyLevel != null;
+
+  int get _activeReminderCount =>
+      _habitReminders.where((reminder) => reminder.enabled).length;
+
+  List<_HabitItem> get _habits => [
+    _HabitItem(
+      icon: Icons.water_drop_outlined,
+      title: widget.isBangla ? 'পানির লক্ষ্য পূরণ' : 'Reach water goal',
+      description: widget.isBangla
+          ? 'আজকের প্রয়োজনীয় পানি পান করুন'
+          : 'Drink your recommended water today',
+    ),
+    _HabitItem(
+      icon: Icons.directions_walk_outlined,
+      title: widget.isBangla
+          ? '৩০ মিনিট সক্রিয় থাকুন'
+          : 'Stay active for 30 minutes',
+      description: widget.isBangla
+          ? 'হাঁটা বা পছন্দের ব্যায়াম করুন'
+          : 'Walk or do your preferred exercise',
+    ),
+    _HabitItem(
+      icon: Icons.bedtime_outlined,
+      title: widget.isBangla
+          ? 'ঘুমের রুটিন অনুসরণ'
+          : 'Follow your sleep routine',
+      description: widget.isBangla
+          ? 'সময়মতো ঘুমের প্রস্তুতি নিন'
+          : 'Prepare to sleep at your planned time',
+    ),
+  ];
 
   void _toggleHabit(int index) {
     setState(() {
@@ -40,6 +77,26 @@ class _HabitEngineScreenState extends State<HabitEngineScreen> {
       case _CheckInMood.great:
         return widget.isBangla ? 'দারুণ' : 'Great';
     }
+  }
+
+  Future<void> _showReminderSettings() async {
+    final result = await Navigator.of(context).push<List<_HabitReminder>>(
+      MaterialPageRoute(
+        builder: (context) => _ReminderSettingsScreen(
+          isBangla: widget.isBangla,
+          habits: _habits,
+          initialReminders: _habitReminders,
+        ),
+      ),
+    );
+
+    if (result == null || !mounted) {
+      return;
+    }
+
+    setState(() {
+      _habitReminders = result;
+    });
   }
 
   Future<void> _showDailyCheckIn() async {
@@ -72,31 +129,15 @@ class _HabitEngineScreenState extends State<HabitEngineScreen> {
     final theme = Theme.of(context);
     final colorScheme = theme.colorScheme;
     final isBangla = widget.isBangla;
-    final habits = <_HabitItem>[
-      _HabitItem(
-        icon: Icons.water_drop_outlined,
-        title: isBangla ? 'পানির লক্ষ্য পূরণ' : 'Reach water goal',
-        description: isBangla
-            ? 'আজকের প্রয়োজনীয় পানি পান করুন'
-            : 'Drink your recommended water today',
-      ),
-      _HabitItem(
-        icon: Icons.directions_walk_outlined,
-        title: isBangla
-            ? '৩০ মিনিট সক্রিয় থাকুন'
-            : 'Stay active for 30 minutes',
-        description: isBangla
-            ? 'হাঁটা বা পছন্দের ব্যায়াম করুন'
-            : 'Walk or do your preferred exercise',
-      ),
-      _HabitItem(
-        icon: Icons.bedtime_outlined,
-        title: isBangla ? 'ঘুমের রুটিন অনুসরণ' : 'Follow your sleep routine',
-        description: isBangla
-            ? 'সময়মতো ঘুমের প্রস্তুতি নিন'
-            : 'Prepare to sleep at your planned time',
-      ),
-    ];
+    final habits = _habits;
+
+    final reminderDescription = _activeReminderCount == 0
+        ? (isBangla
+              ? 'প্রয়োজনীয় সময়ে অভ্যাসের রিমাইন্ডার ঠিক করুন।'
+              : 'Set reminders for your habits at useful times.')
+        : (isBangla
+              ? '$_activeReminderCountটি অভ্যাসের রিমাইন্ডার চালু আছে।'
+              : '$_activeReminderCount habit reminder${_activeReminderCount == 1 ? '' : 's'} enabled.');
 
     final checkInDescription = _hasCheckIn
         ? (isBangla
@@ -229,10 +270,13 @@ class _HabitEngineScreenState extends State<HabitEngineScreen> {
             _PreviewCard(
               icon: Icons.notifications_none,
               title: isBangla ? 'রিমাইন্ডার' : 'Reminders',
-              description: isBangla
-                  ? 'অভ্যাসের সময় অনুযায়ী রিমাইন্ডার পরবর্তী ধাপে যোগ হবে।'
-                  : 'Habit reminders will be added in a later step.',
-              status: isBangla ? 'পরবর্তী ধাপ' : 'Next step',
+              description: reminderDescription,
+              status: _activeReminderCount == 0
+                  ? (isBangla ? 'রিমাইন্ডার সেট করুন' : 'Set reminders')
+                  : (isBangla
+                        ? 'রিমাইন্ডার পরিবর্তন করুন'
+                        : 'Manage reminders'),
+              onTap: _showReminderSettings,
             ),
             const SizedBox(height: 12),
             _PreviewCard(
@@ -243,6 +287,198 @@ class _HabitEngineScreenState extends State<HabitEngineScreen> {
                   ? (isBangla ? 'চেক-ইন পরিবর্তন করুন' : 'Edit check-in')
                   : (isBangla ? 'চেক-ইন করুন' : 'Check in now'),
               onTap: _showDailyCheckIn,
+            ),
+          ],
+        ),
+      ),
+    );
+  }
+}
+
+class _ReminderSettingsScreen extends StatefulWidget {
+  const _ReminderSettingsScreen({
+    required this.isBangla,
+    required this.habits,
+    required this.initialReminders,
+  });
+
+  final bool isBangla;
+  final List<_HabitItem> habits;
+  final List<_HabitReminder> initialReminders;
+
+  @override
+  State<_ReminderSettingsScreen> createState() =>
+      _ReminderSettingsScreenState();
+}
+
+class _ReminderSettingsScreenState extends State<_ReminderSettingsScreen> {
+  late List<_HabitReminder> _reminders;
+
+  @override
+  void initState() {
+    super.initState();
+    _reminders = List<_HabitReminder>.of(widget.initialReminders);
+  }
+
+  Future<void> _selectTime(int index) async {
+    final selectedTime = await showTimePicker(
+      context: context,
+      initialTime: _reminders[index].time,
+      helpText: widget.isBangla ? 'রিমাইন্ডারের সময়' : 'Reminder time',
+      cancelText: widget.isBangla ? 'বাতিল' : 'Cancel',
+      confirmText: widget.isBangla ? 'ঠিক আছে' : 'OK',
+    );
+
+    if (selectedTime == null || !mounted) {
+      return;
+    }
+
+    setState(() {
+      _reminders[index] = _reminders[index].copyWith(time: selectedTime);
+    });
+  }
+
+  void _toggleReminder(int index, bool enabled) {
+    setState(() {
+      _reminders[index] = _reminders[index].copyWith(enabled: enabled);
+    });
+  }
+
+  void _save() {
+    Navigator.of(context).pop(List<_HabitReminder>.of(_reminders));
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    final theme = Theme.of(context);
+    final colorScheme = theme.colorScheme;
+
+    return Scaffold(
+      appBar: AppBar(title: Text(widget.isBangla ? 'রিমাইন্ডার' : 'Reminders')),
+      body: SafeArea(
+        child: ListView(
+          padding: const EdgeInsets.fromLTRB(16, 12, 16, 24),
+          children: [
+            Text(
+              widget.isBangla
+                  ? 'অভ্যাসের সময় ঠিক করুন'
+                  : 'Choose habit reminder times',
+              style: theme.textTheme.headlineSmall?.copyWith(
+                fontWeight: FontWeight.bold,
+              ),
+            ),
+            const SizedBox(height: 6),
+            Text(
+              widget.isBangla
+                  ? 'প্রয়োজনীয় অভ্যাসের রিমাইন্ডার চালু করুন এবং সময় নির্বাচন করুন।'
+                  : 'Enable the reminders you need and choose a time for each.',
+              style: theme.textTheme.bodyLarge?.copyWith(
+                color: colorScheme.onSurfaceVariant,
+              ),
+            ),
+            const SizedBox(height: 18),
+            ...List.generate(widget.habits.length, (index) {
+              final habit = widget.habits[index];
+              final reminder = _reminders[index];
+
+              return Card(
+                margin: const EdgeInsets.only(bottom: 12),
+                child: Padding(
+                  padding: const EdgeInsets.fromLTRB(4, 4, 12, 12),
+                  child: Column(
+                    children: [
+                      SwitchListTile(
+                        value: reminder.enabled,
+                        onChanged: (enabled) => _toggleReminder(index, enabled),
+                        secondary: CircleAvatar(
+                          backgroundColor: colorScheme.secondaryContainer,
+                          child: Icon(
+                            habit.icon,
+                            color: colorScheme.onSecondaryContainer,
+                          ),
+                        ),
+                        title: Text(
+                          habit.title,
+                          style: const TextStyle(fontWeight: FontWeight.w600),
+                        ),
+                        subtitle: Text(
+                          reminder.enabled
+                              ? (widget.isBangla
+                                    ? 'রিমাইন্ডার চালু আছে'
+                                    : 'Reminder enabled')
+                              : (widget.isBangla
+                                    ? 'রিমাইন্ডার বন্ধ আছে'
+                                    : 'Reminder disabled'),
+                        ),
+                      ),
+                      if (reminder.enabled)
+                        Padding(
+                          padding: const EdgeInsets.only(left: 12),
+                          child: Row(
+                            children: [
+                              Expanded(
+                                child: Text(
+                                  widget.isBangla
+                                      ? 'রিমাইন্ডারের সময়'
+                                      : 'Reminder time',
+                                  style: theme.textTheme.bodyMedium,
+                                ),
+                              ),
+                              OutlinedButton.icon(
+                                onPressed: () => _selectTime(index),
+                                icon: const Icon(Icons.schedule, size: 18),
+                                label: Text(
+                                  MaterialLocalizations.of(
+                                    context,
+                                  ).formatTimeOfDay(reminder.time),
+                                ),
+                              ),
+                            ],
+                          ),
+                        ),
+                    ],
+                  ),
+                ),
+              );
+            }),
+            Card(
+              margin: EdgeInsets.zero,
+              color: colorScheme.secondaryContainer,
+              child: Padding(
+                padding: const EdgeInsets.all(14),
+                child: Row(
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  children: [
+                    Icon(
+                      Icons.info_outline,
+                      color: colorScheme.onSecondaryContainer,
+                    ),
+                    const SizedBox(width: 10),
+                    Expanded(
+                      child: Text(
+                        widget.isBangla
+                            ? 'এই ধাপে রিমাইন্ডারের সেটিংস শুধু অ্যাপের মধ্যে থাকবে। ফোনে notification পাঠানো পরবর্তী ধাপে যোগ হবে।'
+                            : 'In this step, reminder settings stay inside the app. Phone notifications will be added in the next step.',
+                        style: theme.textTheme.bodySmall?.copyWith(
+                          color: colorScheme.onSecondaryContainer,
+                        ),
+                      ),
+                    ),
+                  ],
+                ),
+              ),
+            ),
+            const SizedBox(height: 18),
+            SizedBox(
+              width: double.infinity,
+              child: FilledButton(
+                onPressed: _save,
+                child: Text(
+                  widget.isBangla
+                      ? 'রিমাইন্ডার সংরক্ষণ করুন'
+                      : 'Save reminders',
+                ),
+              ),
             ),
           ],
         ),
@@ -471,6 +707,20 @@ class _DailyCheckInResult {
   final _CheckInMood mood;
   final int energyLevel;
   final String note;
+}
+
+class _HabitReminder {
+  const _HabitReminder({required this.enabled, required this.time});
+
+  final bool enabled;
+  final TimeOfDay time;
+
+  _HabitReminder copyWith({bool? enabled, TimeOfDay? time}) {
+    return _HabitReminder(
+      enabled: enabled ?? this.enabled,
+      time: time ?? this.time,
+    );
+  }
 }
 
 class _HabitItem {
