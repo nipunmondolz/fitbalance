@@ -1,6 +1,7 @@
 import 'package:flutter/material.dart';
 
 import 'daily_log_screen.dart';
+import 'habit_engine_screen.dart';
 import 'today_dashboard_screen.dart';
 
 class DashboardNavigationScreen extends StatefulWidget {
@@ -56,14 +57,9 @@ class _DashboardNavigationScreenState extends State<DashboardNavigationScreen> {
         targetCaloriesMin: widget.targetCaloriesMin,
         targetCaloriesMax: widget.targetCaloriesMax,
       ),
-      _DashboardPlaceholderScreen(
-        icon: Icons.event_note_outlined,
-        title: isBangla ? 'স্বাস্থ্য পরিকল্পনা' : 'Health plan',
-        description: isBangla
-            ? 'আপনার দৈনিক ও সাপ্তাহিক খাবার, activity এবং recovery plan এখানে থাকবে।'
-            : 'Your daily and weekly meal, activity, and recovery plan will appear here.',
-        isBangla: isBangla,
-      ),
+      HabitEngineScreen(
+  isBangla: isBangla,
+),
       _DashboardPlaceholderScreen(
         icon: Icons.bar_chart,
         title: isBangla ? 'অগ্রগতি' : 'Progress',
