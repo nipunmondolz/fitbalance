@@ -1,5 +1,7 @@
 import 'package:flutter/material.dart';
 
+import '../services/notification_service.dart';
+
 class HabitEngineScreen extends StatefulWidget {
   const HabitEngineScreen({required this.isBangla, super.key});
 
@@ -344,7 +346,90 @@ class _ReminderSettingsScreenState extends State<_ReminderSettingsScreen> {
     });
   }
 
-  void _save() {
+  Future<void> _save() async {
+    final hasEnabledReminder = _reminders.any((reminder) => reminder.enabled);
+
+    if (hasEnabledReminder) {
+      try {
+        final permissionsGranted = await NotificationService.instance
+            .requestSchedulingPermissions();
+
+        if (!mounted) {
+          return;
+        }
+
+        if (!permissionsGranted) {
+          ScaffoldMessenger.of(context).showSnackBar(
+            SnackBar(
+              content: Text(
+                widget.isBangla
+                    ? 'রিমাইন্ডারের জন্য Notification এবং Alarms & reminders permission প্রয়োজন।'
+                    : 'Notification and Alarms & reminders permissions are required.',
+              ),
+            ),
+          );
+          return;
+        }
+      } catch (_) {
+        if (!mounted) {
+          return;
+        }
+
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(
+            content: Text(
+              widget.isBangla
+                  ? 'Notification permission চালু করা যায়নি। আবার চেষ্টা করুন।'
+                  : 'Notification permissions could not be enabled. Try again.',
+            ),
+          ),
+        );
+        return;
+      }
+    }
+
+    try {
+      for (var index = 0; index < _reminders.length; index++) {
+        final reminder = _reminders[index];
+        final notificationId = 1000 + index;
+
+        if (reminder.enabled) {
+          await NotificationService.instance.scheduleDailyHabitReminder(
+            id: notificationId,
+            hour: reminder.time.hour,
+            minute: reminder.time.minute,
+            title: widget.habits[index].title,
+            body: widget.isBangla
+                ? 'আজকের স্বাস্থ্যকর অভ্যাসটি সম্পন্ন করুন।'
+                : 'Complete this healthy habit for today.',
+          );
+        } else {
+          await NotificationService.instance.cancelHabitReminder(
+            notificationId,
+          );
+        }
+      }
+    } catch (_) {
+      if (!mounted) {
+        return;
+      }
+
+      ScaffoldMessenger.of(context).showSnackBar(
+        SnackBar(
+          content: Text(
+            widget.isBangla
+                ? 'রিমাইন্ডার schedule করা যায়নি। আবার চেষ্টা করুন।'
+                : 'The reminders could not be scheduled. Try again.',
+          ),
+        ),
+      );
+      return;
+    }
+
+    if (!mounted) {
+      return;
+    }
+
     Navigator.of(context).pop(List<_HabitReminder>.of(_reminders));
   }
 
@@ -457,8 +542,8 @@ class _ReminderSettingsScreenState extends State<_ReminderSettingsScreen> {
                     Expanded(
                       child: Text(
                         widget.isBangla
-                            ? 'এই ধাপে রিমাইন্ডারের সেটিংস শুধু অ্যাপের মধ্যে থাকবে। ফোনে notification পাঠানো পরবর্তী ধাপে যোগ হবে।'
-                            : 'In this step, reminder settings stay inside the app. Phone notifications will be added in the next step.',
+                            ? 'চালু করা রিমাইন্ডার প্রতিদিন নির্বাচিত সময়ে notification পাঠাবে।'
+                            : 'Enabled reminders will send a notification every day at the selected time.',
                         style: theme.textTheme.bodySmall?.copyWith(
                           color: colorScheme.onSecondaryContainer,
                         ),
