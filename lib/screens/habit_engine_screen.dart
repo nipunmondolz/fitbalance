@@ -48,8 +48,13 @@ class _HabitEngineScreenState extends State<HabitEngineScreen> {
 
       final checkInFuture = HabitStorageService.instance.loadTodayCheckIn();
 
+      final remindersFuture = HabitStorageService.instance.loadHabitReminders(
+        _habitReminders.length,
+      );
+
       final savedCompletions = await completionsFuture;
       final savedCheckIn = await checkInFuture;
+      final savedReminders = await remindersFuture;
 
       if (!mounted) {
         return;
@@ -64,6 +69,17 @@ class _HabitEngineScreenState extends State<HabitEngineScreen> {
           _checkInMood = _CheckInMood.values[savedCheckIn.moodIndex];
           _energyLevel = savedCheckIn.energyLevel;
           _checkInNote = savedCheckIn.note;
+        }
+
+        if (savedReminders != null) {
+          _habitReminders = savedReminders
+              .map(
+                (reminder) => _HabitReminder(
+                  enabled: reminder.enabled,
+                  time: TimeOfDay(hour: reminder.hour, minute: reminder.minute),
+                ),
+              )
+              .toList(growable: false);
         }
       });
     } catch (_) {
@@ -518,6 +534,35 @@ class _ReminderSettingsScreenState extends State<_ReminderSettingsScreen> {
             widget.isBangla
                 ? 'রিমাইন্ডার schedule করা যায়নি। আবার চেষ্টা করুন।'
                 : 'The reminders could not be scheduled. Try again.',
+          ),
+        ),
+      );
+      return;
+    }
+
+    try {
+      await HabitStorageService.instance.saveHabitReminders(
+        _reminders
+            .map(
+              (reminder) => StoredHabitReminder(
+                enabled: reminder.enabled,
+                hour: reminder.time.hour,
+                minute: reminder.time.minute,
+              ),
+            )
+            .toList(growable: false),
+      );
+    } catch (_) {
+      if (!mounted) {
+        return;
+      }
+
+      ScaffoldMessenger.of(context).showSnackBar(
+        SnackBar(
+          content: Text(
+            widget.isBangla
+                ? 'রিমাইন্ডার সেটিংস সংরক্ষণ করা যায়নি।'
+                : 'The reminder settings could not be saved.',
           ),
         ),
       );
