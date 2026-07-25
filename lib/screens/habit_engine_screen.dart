@@ -1,5 +1,6 @@
 import 'package:flutter/material.dart';
 
+import '../services/habit_storage_service.dart';
 import '../services/notification_service.dart';
 
 class HabitEngineScreen extends StatefulWidget {
@@ -12,7 +13,7 @@ class HabitEngineScreen extends StatefulWidget {
 }
 
 class _HabitEngineScreenState extends State<HabitEngineScreen> {
-  final List<bool> _completedHabits = [false, false, false];
+  List<bool> _completedHabits = [false, false, false];
 
   List<_HabitReminder> _habitReminders = const [
     _HabitReminder(enabled: false, time: TimeOfDay(hour: 9, minute: 0)),
@@ -33,6 +34,29 @@ class _HabitEngineScreenState extends State<HabitEngineScreen> {
 
   int get _activeReminderCount =>
       _habitReminders.where((reminder) => reminder.enabled).length;
+
+  @override
+  void initState() {
+    super.initState();
+    _loadHabitCompletions();
+  }
+
+  Future<void> _loadHabitCompletions() async {
+    try {
+      final savedCompletions = await HabitStorageService.instance
+          .loadTodayCompletions(_completedHabits.length);
+
+      if (!mounted) {
+        return;
+      }
+
+      setState(() {
+        _completedHabits = savedCompletions;
+      });
+    } catch (_) {
+      // Storage read ব্যর্থ হলে default incomplete state রাখা হবে।
+    }
+  }
 
   List<_HabitItem> get _habits => [
     _HabitItem(
@@ -62,10 +86,39 @@ class _HabitEngineScreenState extends State<HabitEngineScreen> {
     ),
   ];
 
-  void _toggleHabit(int index) {
+  Future<void> _toggleHabit(int index) async {
+    final previousCompletions = List<bool>.of(_completedHabits);
+    final updatedCompletions = List<bool>.of(_completedHabits);
+
+    updatedCompletions[index] = !updatedCompletions[index];
+
     setState(() {
-      _completedHabits[index] = !_completedHabits[index];
+      _completedHabits = updatedCompletions;
     });
+
+    try {
+      await HabitStorageService.instance.saveTodayCompletions(
+        updatedCompletions,
+      );
+    } catch (_) {
+      if (!mounted) {
+        return;
+      }
+
+      setState(() {
+        _completedHabits = previousCompletions;
+      });
+
+      ScaffoldMessenger.of(context).showSnackBar(
+        SnackBar(
+          content: Text(
+            widget.isBangla
+                ? 'অভ্যাসের পরিবর্তন সংরক্ষণ করা যায়নি।'
+                : 'The habit change could not be saved.',
+          ),
+        ),
+      );
+    }
   }
 
   String _moodName(_CheckInMood mood) {
