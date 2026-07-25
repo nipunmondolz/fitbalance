@@ -38,13 +38,18 @@ class _HabitEngineScreenState extends State<HabitEngineScreen> {
   @override
   void initState() {
     super.initState();
-    _loadHabitCompletions();
+    _loadTodayHabitData();
   }
 
-  Future<void> _loadHabitCompletions() async {
+  Future<void> _loadTodayHabitData() async {
     try {
-      final savedCompletions = await HabitStorageService.instance
+      final completionsFuture = HabitStorageService.instance
           .loadTodayCompletions(_completedHabits.length);
+
+      final checkInFuture = HabitStorageService.instance.loadTodayCheckIn();
+
+      final savedCompletions = await completionsFuture;
+      final savedCheckIn = await checkInFuture;
 
       if (!mounted) {
         return;
@@ -52,9 +57,17 @@ class _HabitEngineScreenState extends State<HabitEngineScreen> {
 
       setState(() {
         _completedHabits = savedCompletions;
+
+        if (savedCheckIn != null &&
+            savedCheckIn.moodIndex >= 0 &&
+            savedCheckIn.moodIndex < _CheckInMood.values.length) {
+          _checkInMood = _CheckInMood.values[savedCheckIn.moodIndex];
+          _energyLevel = savedCheckIn.energyLevel;
+          _checkInNote = savedCheckIn.note;
+        }
       });
     } catch (_) {
-      // Storage read ব্যর্থ হলে default incomplete state রাখা হবে।
+      // Storage read ব্যর্থ হলে default state রাখা হবে।
     }
   }
 
@@ -172,11 +185,43 @@ class _HabitEngineScreenState extends State<HabitEngineScreen> {
       return;
     }
 
+    final previousMood = _checkInMood;
+    final previousEnergyLevel = _energyLevel;
+    final previousNote = _checkInNote;
+
     setState(() {
       _checkInMood = result.mood;
       _energyLevel = result.energyLevel;
       _checkInNote = result.note;
     });
+
+    try {
+      await HabitStorageService.instance.saveTodayCheckIn(
+        moodIndex: result.mood.index,
+        energyLevel: result.energyLevel,
+        note: result.note,
+      );
+    } catch (_) {
+      if (!mounted) {
+        return;
+      }
+
+      setState(() {
+        _checkInMood = previousMood;
+        _energyLevel = previousEnergyLevel;
+        _checkInNote = previousNote;
+      });
+
+      ScaffoldMessenger.of(context).showSnackBar(
+        SnackBar(
+          content: Text(
+            widget.isBangla
+                ? 'দৈনিক চেক-ইন সংরক্ষণ করা যায়নি।'
+                : 'The daily check-in could not be saved.',
+          ),
+        ),
+      );
+    }
   }
 
   @override
