@@ -1,5 +1,7 @@
 import 'package:flutter/material.dart';
 
+import '../services/daily_log_storage_service.dart';
+
 enum _LogType { meal, water, softDrink, exercise, sleep }
 
 enum _MealTime { morning, noon, afternoon, night }
@@ -379,7 +381,73 @@ class DailyLogScreen extends StatefulWidget {
 }
 
 class _DailyLogScreenState extends State<DailyLogScreen> {
-  final List<_DailyLogEntry> _entries = [];
+  List<_DailyLogEntry> _entries = [];
+
+  @override
+  void initState() {
+    super.initState();
+    _loadTodayEntries();
+  }
+
+  Future<void> _loadTodayEntries() async {
+    try {
+      final storedEntries = await DailyLogStorageService.instance
+          .loadTodayEntries();
+
+      final loadedEntries = storedEntries
+          .where(
+            (entry) =>
+                entry.typeIndex >= 0 &&
+                entry.typeIndex < _LogType.values.length,
+          )
+          .map(
+            (entry) => _DailyLogEntry(
+              type: _LogType.values[entry.typeIndex],
+              title: entry.title,
+              amount: entry.amount,
+              details: entry.details,
+            ),
+          )
+          .toList(growable: false);
+
+      if (!mounted) {
+        return;
+      }
+
+      setState(() {
+        _entries = loadedEntries;
+      });
+    } catch (_) {
+      // Storage read ব্যর্থ হলে আজকের log খালি রাখা হবে।
+    }
+  }
+
+  Future<void> _saveEntries(List<_DailyLogEntry> entries) {
+    final storedEntries = entries
+        .map(
+          (entry) => StoredDailyLogEntry(
+            typeIndex: entry.type.index,
+            title: entry.title,
+            amount: entry.amount,
+            details: entry.details,
+          ),
+        )
+        .toList(growable: false);
+
+    return DailyLogStorageService.instance.saveTodayEntries(storedEntries);
+  }
+
+  void _showStorageError() {
+    ScaffoldMessenger.of(context).showSnackBar(
+      SnackBar(
+        content: Text(
+          widget.isBangla
+              ? 'দৈনিক লগ সংরক্ষণ করা যায়নি। আবার চেষ্টা করুন।'
+              : 'The daily log could not be saved. Please try again.',
+        ),
+      ),
+    );
+  }
 
   int get _calories => _entries
       .where((entry) => entry.type == _LogType.meal)
@@ -438,13 +506,32 @@ class _DailyLogScreenState extends State<DailyLogScreen> {
     }
   }
 
-  void _insertEntry(_DailyLogEntry entry) {
+  Future<void> _insertEntry(_DailyLogEntry entry) async {
+    final previousEntries = List<_DailyLogEntry>.of(_entries);
+    final updatedEntries = List<_DailyLogEntry>.of(_entries);
+
+    if (entry.type == _LogType.sleep) {
+      updatedEntries.removeWhere((item) => item.type == _LogType.sleep);
+    }
+
+    updatedEntries.insert(0, entry);
+
     setState(() {
-      if (entry.type == _LogType.sleep) {
-        _entries.removeWhere((item) => item.type == _LogType.sleep);
-      }
-      _entries.insert(0, entry);
+      _entries = updatedEntries;
     });
+
+    try {
+      await _saveEntries(updatedEntries);
+    } catch (_) {
+      if (!mounted) {
+        return;
+      }
+
+      setState(() {
+        _entries = previousEntries;
+      });
+      _showStorageError();
+    }
   }
 
   Future<void> _showFoodPicker() async {
@@ -455,7 +542,7 @@ class _DailyLogScreenState extends State<DailyLogScreen> {
     );
 
     if (entry != null && mounted) {
-      _insertEntry(entry);
+      await _insertEntry(entry);
     }
   }
 
@@ -534,8 +621,12 @@ class _DailyLogScreenState extends State<DailyLogScreen> {
                     const SizedBox(height: 22),
                     Text(
                       isWater
-                          ? (widget.isBangla ? 'কত গ্লাস?' : 'How many glasses?')
-                          : (widget.isBangla ? 'কত মিলিলিটার?' : 'How many millilitres?'),
+                          ? (widget.isBangla
+                                ? 'কত গ্লাস?'
+                                : 'How many glasses?')
+                          : (widget.isBangla
+                                ? 'কত মিলিলিটার?'
+                                : 'How many millilitres?'),
                       style: Theme.of(context).textTheme.titleMedium?.copyWith(
                         fontWeight: FontWeight.bold,
                       ),
@@ -605,9 +696,7 @@ class _DailyLogScreenState extends State<DailyLogScreen> {
                           );
                         },
                         icon: const Icon(Icons.add),
-                        label: Text(
-                          widget.isBangla ? 'যোগ করুন' : 'Add',
-                        ),
+                        label: Text(widget.isBangla ? 'যোগ করুন' : 'Add'),
                       ),
                     ),
                   ],
@@ -620,7 +709,7 @@ class _DailyLogScreenState extends State<DailyLogScreen> {
     );
 
     if (entry != null && mounted) {
-      _insertEntry(entry);
+      await _insertEntry(entry);
     }
   }
 
@@ -720,7 +809,7 @@ class _DailyLogScreenState extends State<DailyLogScreen> {
     );
 
     if (entry != null && mounted) {
-      _insertEntry(entry);
+      await _insertEntry(entry);
     }
   }
 
@@ -826,7 +915,7 @@ class _DailyLogScreenState extends State<DailyLogScreen> {
     );
 
     if (entry != null && mounted) {
-      _insertEntry(entry);
+      await _insertEntry(entry);
     }
   }
 
@@ -854,9 +943,25 @@ class _DailyLogScreenState extends State<DailyLogScreen> {
     );
 
     if (shouldDelete == true && mounted && index < _entries.length) {
+      final previousEntries = List<_DailyLogEntry>.of(_entries);
+      final updatedEntries = List<_DailyLogEntry>.of(_entries)..removeAt(index);
+
       setState(() {
-        _entries.removeAt(index);
+        _entries = updatedEntries;
       });
+
+      try {
+        await _saveEntries(updatedEntries);
+      } catch (_) {
+        if (!mounted) {
+          return;
+        }
+
+        setState(() {
+          _entries = previousEntries;
+        });
+        _showStorageError();
+      }
     }
   }
 
