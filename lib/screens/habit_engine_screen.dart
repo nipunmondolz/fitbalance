@@ -1,3 +1,5 @@
+import 'dart:async';
+
 import 'package:flutter/material.dart';
 
 import '../services/habit_storage_service.dart';
@@ -12,8 +14,13 @@ class HabitEngineScreen extends StatefulWidget {
   State<HabitEngineScreen> createState() => _HabitEngineScreenState();
 }
 
-class _HabitEngineScreenState extends State<HabitEngineScreen> {
+class _HabitEngineScreenState extends State<HabitEngineScreen>
+    with WidgetsBindingObserver {
   List<bool> _completedHabits = [false, false, false];
+
+  Timer? _midnightRefreshTimer;
+  late int _loadedDateToken;
+  bool _isRefreshingForNewDay = false;
 
   List<_HabitReminder> _habitReminders = const [
     _HabitReminder(enabled: false, time: TimeOfDay(hour: 9, minute: 0)),
@@ -38,7 +45,70 @@ class _HabitEngineScreenState extends State<HabitEngineScreen> {
   @override
   void initState() {
     super.initState();
-    _loadTodayHabitData();
+    WidgetsBinding.instance.addObserver(this);
+    _loadedDateToken = _currentDateToken;
+    unawaited(_loadTodayHabitData());
+    _scheduleMidnightRefresh();
+  }
+
+  int get _currentDateToken {
+    final now = DateTime.now();
+    return (now.year * 10000) + (now.month * 100) + now.day;
+  }
+
+  @override
+  void didChangeAppLifecycleState(AppLifecycleState state) {
+    if (state == AppLifecycleState.resumed) {
+      unawaited(_refreshForNewDay());
+      _scheduleMidnightRefresh();
+    }
+  }
+
+  void _scheduleMidnightRefresh() {
+    _midnightRefreshTimer?.cancel();
+
+    final now = DateTime.now();
+    final nextMidnight = DateTime(now.year, now.month, now.day + 1);
+
+    final delay = nextMidnight.difference(now) + const Duration(seconds: 1);
+
+    _midnightRefreshTimer = Timer(delay, () {
+      unawaited(_refreshForNewDay());
+      _scheduleMidnightRefresh();
+    });
+  }
+
+  Future<void> _refreshForNewDay() async {
+    final currentDateToken = _currentDateToken;
+
+    if (!mounted ||
+        currentDateToken == _loadedDateToken ||
+        _isRefreshingForNewDay) {
+      return;
+    }
+
+    _isRefreshingForNewDay = true;
+    _loadedDateToken = currentDateToken;
+
+    setState(() {
+      _completedHabits = List<bool>.filled(_completedHabits.length, false);
+      _checkInMood = null;
+      _energyLevel = null;
+      _checkInNote = '';
+    });
+
+    try {
+      await _loadTodayHabitData();
+    } finally {
+      _isRefreshingForNewDay = false;
+    }
+  }
+
+  @override
+  void dispose() {
+    WidgetsBinding.instance.removeObserver(this);
+    _midnightRefreshTimer?.cancel();
+    super.dispose();
   }
 
   Future<void> _loadTodayHabitData() async {
@@ -69,6 +139,10 @@ class _HabitEngineScreenState extends State<HabitEngineScreen> {
           _checkInMood = _CheckInMood.values[savedCheckIn.moodIndex];
           _energyLevel = savedCheckIn.energyLevel;
           _checkInNote = savedCheckIn.note;
+        } else {
+          _checkInMood = null;
+          _energyLevel = null;
+          _checkInNote = '';
         }
 
         if (savedReminders != null) {
