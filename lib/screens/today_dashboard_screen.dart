@@ -17,6 +17,8 @@ class TodayDashboardScreen extends StatefulWidget {
     required this.sleep,
     required this.budget,
     required this.refreshListenable,
+    required this.onOpenLog,
+    required this.onOpenHabits,
     super.key,
   });
 
@@ -29,6 +31,8 @@ class TodayDashboardScreen extends StatefulWidget {
   final String sleep;
   final String budget;
   final ValueListenable<int> refreshListenable;
+  final VoidCallback onOpenLog;
+  final VoidCallback onOpenHabits;
 
   @override
   State<TodayDashboardScreen> createState() => _TodayDashboardScreenState();
@@ -272,20 +276,6 @@ class _TodayDashboardScreenState extends State<TodayDashboardScreen>
     }
   }
 
-  void _showComingSoon(BuildContext context, String feature) {
-    ScaffoldMessenger.of(context)
-      ..hideCurrentSnackBar()
-      ..showSnackBar(
-        SnackBar(
-          content: Text(
-            isBangla
-                ? '$feature ফিচারটি পরবর্তী development ধাপে যোগ করা হবে'
-                : '$feature will be added in a later development step',
-          ),
-        ),
-      );
-  }
-
   @override
   Widget build(BuildContext context) {
     final theme = Theme.of(context);
@@ -481,10 +471,7 @@ class _TodayDashboardScreenState extends State<TodayDashboardScreen>
                     child: _QuickActionCard(
                       icon: Icons.restaurant_menu,
                       label: isBangla ? 'খাবার' : 'Meal',
-                      onTap: () => _showComingSoon(
-                        context,
-                        isBangla ? 'খাবার লগ' : 'Meal logging',
-                      ),
+                      onTap: widget.onOpenLog,
                     ),
                   ),
                   const SizedBox(width: 10),
@@ -492,10 +479,7 @@ class _TodayDashboardScreenState extends State<TodayDashboardScreen>
                     child: _QuickActionCard(
                       icon: Icons.directions_walk,
                       label: isBangla ? 'ব্যায়াম' : 'Activity',
-                      onTap: () => _showComingSoon(
-                        context,
-                        isBangla ? 'ব্যায়াম লগ' : 'Activity logging',
-                      ),
+                      onTap: widget.onOpenLog,
                     ),
                   ),
                   const SizedBox(width: 10),
@@ -503,10 +487,7 @@ class _TodayDashboardScreenState extends State<TodayDashboardScreen>
                     child: _QuickActionCard(
                       icon: Icons.check_circle_outline,
                       label: isBangla ? 'অভ্যাস' : 'Habits',
-                      onTap: () => _showComingSoon(
-                        context,
-                        isBangla ? 'অভ্যাস ট্র্যাকিং' : 'Habit tracking',
-                      ),
+                      onTap: widget.onOpenHabits,
                     ),
                   ),
                 ],

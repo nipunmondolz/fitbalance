@@ -54,6 +54,8 @@ class _DashboardNavigationScreenState extends State<DashboardNavigationScreen> {
         sleep: widget.sleep,
         budget: widget.budget,
         refreshListenable: _todayRefreshNotifier,
+        onOpenLog: () => _selectPage(1),
+        onOpenHabits: () => _selectPage(2),
       ),
       DailyLogScreen(
         isBangla: isBangla,
