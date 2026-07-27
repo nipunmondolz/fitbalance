@@ -6,6 +6,7 @@ import 'package:flutter/material.dart';
 
 import '../services/daily_log_storage_service.dart';
 import '../services/habit_storage_service.dart';
+import '../services/weight_storage_service.dart';
 
 class ProgressScreen extends StatefulWidget {
   const ProgressScreen({
@@ -37,6 +38,13 @@ class _ChartBarData {
   final String label;
   final double value;
   final String valueText;
+}
+
+class _WeightTrendPoint {
+  const _WeightTrendPoint({required this.date, required this.weightKg});
+
+  final DateTime date;
+  final double? weightKg;
 }
 
 class _ProgressDay {
@@ -73,9 +81,11 @@ class _ProgressScreenState extends State<ProgressScreen>
   List<bool> _habitCompletions = List<bool>.filled(_habitCount, false);
   StoredDailyCheckIn? _dailyCheckIn;
   List<_ProgressDay> _sevenDayProgress = const [];
+  List<StoredWeightEntry> _weightEntries = const [];
   _ProgressChartMetric _selectedChartMetric = _ProgressChartMetric.calories;
 
   bool _isLoading = true;
+  bool _isSavingWeight = false;
   int _loadGeneration = 0;
 
   int get _completedHabitCount =>
@@ -90,6 +100,51 @@ class _ProgressScreenState extends State<ProgressScreen>
       : (_dailyLogSummary.calories / widget.targetCaloriesMax)
             .clamp(0.0, 1.0)
             .toDouble();
+
+  StoredWeightEntry? get _latestWeight =>
+      _weightEntries.isEmpty ? null : _weightEntries.last;
+
+  StoredWeightEntry? get _startingWeight =>
+      _weightEntries.isEmpty ? null : _weightEntries.first;
+
+  StoredWeightEntry? get _todayWeight {
+    final now = DateTime.now();
+
+    for (final entry in _weightEntries.reversed) {
+      if (_isSameDate(entry.date, now)) {
+        return entry;
+      }
+    }
+
+    return null;
+  }
+
+  double? get _totalWeightChange {
+    final startingWeight = _startingWeight;
+    final latestWeight = _latestWeight;
+
+    if (startingWeight == null || latestWeight == null) {
+      return null;
+    }
+
+    return latestWeight.weightKg - startingWeight.weightKg;
+  }
+
+  List<_WeightTrendPoint> get _weightTrendPoints {
+    final now = DateTime.now();
+    final today = DateTime(now.year, now.month, now.day);
+    final entriesByDate = <int, StoredWeightEntry>{
+      for (final entry in _weightEntries) _dateToken(entry.date): entry,
+    };
+
+    return List<_WeightTrendPoint>.generate(7, (index) {
+      final date = today.subtract(Duration(days: 6 - index));
+      return _WeightTrendPoint(
+        date: date,
+        weightKg: entriesByDate[_dateToken(date)]?.weightKg,
+      );
+    }, growable: false);
+  }
 
   List<_ProgressDay> get _loggedProgressDays => _sevenDayProgress
       .where((progressDay) => progressDay.hasSavedData)
@@ -205,7 +260,11 @@ class _ProgressScreenState extends State<ProgressScreen>
     );
 
     try {
-      final sevenDayProgress = await Future.wait(dates.map(_loadProgressDay));
+      final sevenDayProgressFuture = Future.wait(dates.map(_loadProgressDay));
+      final weightEntriesFuture = WeightStorageService.instance.loadEntries();
+
+      final sevenDayProgress = await sevenDayProgressFuture;
+      final weightEntries = await weightEntriesFuture;
 
       if (!mounted || loadGeneration != _loadGeneration) {
         return;
@@ -218,6 +277,7 @@ class _ProgressScreenState extends State<ProgressScreen>
         _habitCompletions = todayProgress.habitCompletions;
         _dailyCheckIn = todayProgress.dailyCheckIn;
         _sevenDayProgress = sevenDayProgress;
+        _weightEntries = weightEntries;
         _isLoading = false;
       });
     } catch (_) {
@@ -228,6 +288,103 @@ class _ProgressScreenState extends State<ProgressScreen>
       setState(() {
         _isLoading = false;
       });
+    }
+  }
+
+  bool _isSameDate(DateTime first, DateTime second) {
+    return first.year == second.year &&
+        first.month == second.month &&
+        first.day == second.day;
+  }
+
+  int _dateToken(DateTime date) {
+    return (date.year * 10000) + (date.month * 100) + date.day;
+  }
+
+  String _signedWeightChange(double change) {
+    final prefix = change > 0 ? '+' : '';
+    return '$prefix${change.toStringAsFixed(1)} kg';
+  }
+
+  String _weightDateLabel(DateTime date) {
+    final now = DateTime.now();
+
+    if (_isSameDate(date, now)) {
+      return widget.isBangla ? 'আজ' : 'Today';
+    }
+
+    final day = date.day.toString().padLeft(2, '0');
+    final month = date.month.toString().padLeft(2, '0');
+    return '$day/$month/${date.year}';
+  }
+
+  Future<void> _showWeightEntrySheet() async {
+    final weightKg = await showModalBottomSheet<double>(
+      context: context,
+      isScrollControlled: true,
+      showDragHandle: true,
+      builder: (sheetContext) {
+        return _WeightEntrySheet(
+          isBangla: widget.isBangla,
+          initialWeight: _todayWeight?.weightKg ?? _latestWeight?.weightKg,
+          isUpdatingToday: _todayWeight != null,
+        );
+      },
+    );
+
+    if (weightKg == null || !mounted) {
+      return;
+    }
+
+    setState(() {
+      _isSavingWeight = true;
+    });
+
+    try {
+      final updatedEntries = await WeightStorageService.instance
+          .saveWeightForDate(date: DateTime.now(), weightKg: weightKg);
+
+      if (!mounted) {
+        return;
+      }
+
+      setState(() {
+        _weightEntries = updatedEntries;
+      });
+
+      ScaffoldMessenger.of(context)
+        ..hideCurrentSnackBar()
+        ..showSnackBar(
+          SnackBar(
+            content: Text(
+              widget.isBangla
+                  ? 'আজকের ওজন সংরক্ষণ হয়েছে।'
+                  : "Today's weight has been saved.",
+            ),
+          ),
+        );
+    } catch (_) {
+      if (!mounted) {
+        return;
+      }
+
+      ScaffoldMessenger.of(context)
+        ..hideCurrentSnackBar()
+        ..showSnackBar(
+          SnackBar(
+            content: Text(
+              widget.isBangla
+                  ? 'ওজন সংরক্ষণ করা যায়নি। আবার চেষ্টা করুন।'
+                  : 'The weight could not be saved. Please try again.',
+            ),
+          ),
+        );
+    } finally {
+      if (mounted) {
+        setState(() {
+          _isSavingWeight = false;
+        });
+      }
     }
   }
 
@@ -460,6 +617,26 @@ class _ProgressScreenState extends State<ProgressScreen>
                 const LinearProgressIndicator(minHeight: 3),
               ],
               const SizedBox(height: 18),
+              _WeightTrackingCard(
+                isBangla: widget.isBangla,
+                latestWeight: _latestWeight,
+                startingWeight: _startingWeight,
+                totalChange: _totalWeightChange,
+                latestDateLabel: _latestWeight == null
+                    ? null
+                    : _weightDateLabel(_latestWeight!.date),
+                isSaving: _isSavingWeight,
+                hasTodayWeight: _todayWeight != null,
+                onLogWeight: _showWeightEntrySheet,
+                signedChangeBuilder: _signedWeightChange,
+              ),
+              const SizedBox(height: 14),
+              _WeightTrendCard(
+                isBangla: widget.isBangla,
+                points: _weightTrendPoints,
+                dayLabelBuilder: _shortDayLabel,
+              ),
+              const SizedBox(height: 14),
               _ProgressSectionCard(
                 title: widget.isBangla ? 'ক্যালরি অগ্রগতি' : 'Calorie progress',
                 child: Column(
@@ -700,6 +877,464 @@ class _ProgressScreenState extends State<ProgressScreen>
               ),
             ],
           ),
+        ),
+      ),
+    );
+  }
+}
+
+class _WeightEntrySheet extends StatefulWidget {
+  const _WeightEntrySheet({
+    required this.isBangla,
+    required this.initialWeight,
+    required this.isUpdatingToday,
+  });
+
+  final bool isBangla;
+  final double? initialWeight;
+  final bool isUpdatingToday;
+
+  @override
+  State<_WeightEntrySheet> createState() => _WeightEntrySheetState();
+}
+
+class _WeightEntrySheetState extends State<_WeightEntrySheet> {
+  late final TextEditingController _controller;
+  String? _errorText;
+
+  @override
+  void initState() {
+    super.initState();
+    _controller = TextEditingController(
+      text: widget.initialWeight?.toStringAsFixed(1) ?? '',
+    );
+  }
+
+  double? _validatedWeight() {
+    final parsed = double.tryParse(
+      _controller.text.trim().replaceAll(',', '.'),
+    );
+
+    if (parsed == null || parsed < 20 || parsed > 400) {
+      setState(() {
+        _errorText = widget.isBangla
+            ? '২০ থেকে ৪০০ কেজির মধ্যে সঠিক ওজন লিখুন।'
+            : 'Enter a valid weight between 20 and 400 kg.';
+      });
+      return null;
+    }
+
+    return parsed;
+  }
+
+  void _submit() {
+    final weightKg = _validatedWeight();
+
+    if (weightKg != null) {
+      Navigator.of(context).pop(weightKg);
+    }
+  }
+
+  @override
+  void dispose() {
+    _controller.dispose();
+    super.dispose();
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    return SafeArea(
+      child: SingleChildScrollView(
+        padding: EdgeInsets.fromLTRB(
+          16,
+          0,
+          16,
+          MediaQuery.viewInsetsOf(context).bottom + 20,
+        ),
+        child: Column(
+          mainAxisSize: MainAxisSize.min,
+          crossAxisAlignment: CrossAxisAlignment.stretch,
+          children: [
+            Text(
+              widget.isUpdatingToday
+                  ? (widget.isBangla
+                        ? 'আজকের ওজন আপডেট করুন'
+                        : "Update today's weight")
+                  : (widget.isBangla
+                        ? 'আজকের ওজন যোগ করুন'
+                        : "Log today's weight"),
+              style: Theme.of(
+                context,
+              ).textTheme.titleLarge?.copyWith(fontWeight: FontWeight.bold),
+            ),
+            const SizedBox(height: 6),
+            Text(
+              widget.isBangla
+                  ? 'একই দিনে আবার save করলে আগের ওজনটি update হবে।'
+                  : 'Saving again on the same day updates the existing entry.',
+            ),
+            const SizedBox(height: 18),
+            TextField(
+              controller: _controller,
+              autofocus: true,
+              keyboardType: const TextInputType.numberWithOptions(
+                decimal: true,
+              ),
+              textInputAction: TextInputAction.done,
+              decoration: InputDecoration(
+                labelText: widget.isBangla ? 'ওজন (কেজি)' : 'Weight (kg)',
+                hintText: '70.5',
+                suffixText: 'kg',
+                errorText: _errorText,
+                border: const OutlineInputBorder(),
+              ),
+              onChanged: (_) {
+                if (_errorText != null) {
+                  setState(() {
+                    _errorText = null;
+                  });
+                }
+              },
+              onSubmitted: (_) => _submit(),
+            ),
+            const SizedBox(height: 18),
+            FilledButton.icon(
+              onPressed: _submit,
+              icon: const Icon(Icons.monitor_weight_outlined),
+              label: Text(widget.isBangla ? 'ওজন সংরক্ষণ করুন' : 'Save weight'),
+            ),
+          ],
+        ),
+      ),
+    );
+  }
+}
+
+class _WeightTrackingCard extends StatelessWidget {
+  const _WeightTrackingCard({
+    required this.isBangla,
+    required this.latestWeight,
+    required this.startingWeight,
+    required this.totalChange,
+    required this.latestDateLabel,
+    required this.isSaving,
+    required this.hasTodayWeight,
+    required this.onLogWeight,
+    required this.signedChangeBuilder,
+  });
+
+  final bool isBangla;
+  final StoredWeightEntry? latestWeight;
+  final StoredWeightEntry? startingWeight;
+  final double? totalChange;
+  final String? latestDateLabel;
+  final bool isSaving;
+  final bool hasTodayWeight;
+  final VoidCallback onLogWeight;
+  final String Function(double change) signedChangeBuilder;
+
+  @override
+  Widget build(BuildContext context) {
+    final theme = Theme.of(context);
+    final colorScheme = theme.colorScheme;
+    final hasWeight = latestWeight != null;
+
+    return Card(
+      margin: EdgeInsets.zero,
+      elevation: 0,
+      color: colorScheme.surfaceContainerLowest,
+      shape: RoundedRectangleBorder(
+        borderRadius: BorderRadius.circular(18),
+        side: BorderSide(color: colorScheme.outlineVariant),
+      ),
+      child: Padding(
+        padding: const EdgeInsets.all(18),
+        child: Column(
+          crossAxisAlignment: CrossAxisAlignment.stretch,
+          children: [
+            Row(
+              children: [
+                Container(
+                  width: 46,
+                  height: 46,
+                  decoration: BoxDecoration(
+                    color: colorScheme.primaryContainer,
+                    borderRadius: BorderRadius.circular(13),
+                  ),
+                  child: Icon(
+                    Icons.monitor_weight_outlined,
+                    color: colorScheme.onPrimaryContainer,
+                  ),
+                ),
+                const SizedBox(width: 12),
+                Expanded(
+                  child: Text(
+                    isBangla ? 'ওজন ট্র্যাকিং' : 'Weight tracking',
+                    style: theme.textTheme.titleMedium?.copyWith(
+                      fontWeight: FontWeight.w600,
+                    ),
+                  ),
+                ),
+              ],
+            ),
+            const SizedBox(height: 16),
+            if (!hasWeight)
+              Text(
+                isBangla
+                    ? 'প্রথম ওজনটি যোগ করলে সেটিই আপনার শুরুর ওজন হিসেবে ধরা হবে।'
+                    : 'Your first saved entry will become your starting weight.',
+                style: theme.textTheme.bodyMedium?.copyWith(
+                  color: colorScheme.onSurfaceVariant,
+                ),
+              )
+            else ...[
+              Text(
+                '${latestWeight!.weightKg.toStringAsFixed(1)} kg',
+                style: theme.textTheme.headlineMedium?.copyWith(
+                  color: colorScheme.primary,
+                  fontWeight: FontWeight.bold,
+                ),
+              ),
+              const SizedBox(height: 3),
+              Text(
+                isBangla
+                    ? 'সর্বশেষ ওজন • $latestDateLabel'
+                    : 'Latest weight • $latestDateLabel',
+                style: theme.textTheme.bodySmall?.copyWith(
+                  color: colorScheme.onSurfaceVariant,
+                ),
+              ),
+              const SizedBox(height: 16),
+              Row(
+                children: [
+                  Expanded(
+                    child: _WeightSummaryValue(
+                      label: isBangla ? 'শুরুর ওজন' : 'Starting weight',
+                      value:
+                          '${startingWeight!.weightKg.toStringAsFixed(1)} kg',
+                    ),
+                  ),
+                  const SizedBox(width: 12),
+                  Expanded(
+                    child: _WeightSummaryValue(
+                      label: isBangla ? 'মোট পরিবর্তন' : 'Total change',
+                      value: signedChangeBuilder(totalChange ?? 0),
+                    ),
+                  ),
+                ],
+              ),
+            ],
+            const SizedBox(height: 18),
+            FilledButton.icon(
+              onPressed: isSaving ? null : onLogWeight,
+              icon: isSaving
+                  ? const SizedBox.square(
+                      dimension: 18,
+                      child: CircularProgressIndicator(strokeWidth: 2),
+                    )
+                  : const Icon(Icons.add),
+              label: Text(
+                hasTodayWeight
+                    ? (isBangla
+                          ? 'আজকের ওজন আপডেট করুন'
+                          : "Update today's weight")
+                    : (isBangla ? 'আজকের ওজন যোগ করুন' : "Log today's weight"),
+              ),
+            ),
+          ],
+        ),
+      ),
+    );
+  }
+}
+
+class _WeightSummaryValue extends StatelessWidget {
+  const _WeightSummaryValue({required this.label, required this.value});
+
+  final String label;
+  final String value;
+
+  @override
+  Widget build(BuildContext context) {
+    final theme = Theme.of(context);
+
+    return Column(
+      crossAxisAlignment: CrossAxisAlignment.start,
+      children: [
+        Text(
+          label,
+          style: theme.textTheme.bodySmall?.copyWith(
+            color: theme.colorScheme.onSurfaceVariant,
+          ),
+        ),
+        const SizedBox(height: 3),
+        Text(
+          value,
+          maxLines: 1,
+          overflow: TextOverflow.ellipsis,
+          style: theme.textTheme.titleMedium?.copyWith(
+            fontWeight: FontWeight.bold,
+          ),
+        ),
+      ],
+    );
+  }
+}
+
+class _WeightTrendCard extends StatelessWidget {
+  const _WeightTrendCard({
+    required this.isBangla,
+    required this.points,
+    required this.dayLabelBuilder,
+  });
+
+  final bool isBangla;
+  final List<_WeightTrendPoint> points;
+  final String Function(DateTime date) dayLabelBuilder;
+
+  @override
+  Widget build(BuildContext context) {
+    final theme = Theme.of(context);
+    final colorScheme = theme.colorScheme;
+    final weights = points
+        .map((point) => point.weightKg)
+        .whereType<double>()
+        .toList(growable: false);
+
+    final minimumWeight = weights.isEmpty
+        ? 0.0
+        : weights.reduce((first, second) => math.min(first, second).toDouble());
+    final maximumWeight = weights.isEmpty
+        ? 0.0
+        : weights.reduce((first, second) => math.max(first, second).toDouble());
+    final range = maximumWeight - minimumWeight;
+
+    return Card(
+      margin: EdgeInsets.zero,
+      elevation: 0,
+      color: colorScheme.surfaceContainerLowest,
+      shape: RoundedRectangleBorder(
+        borderRadius: BorderRadius.circular(18),
+        side: BorderSide(color: colorScheme.outlineVariant),
+      ),
+      child: Padding(
+        padding: const EdgeInsets.all(18),
+        child: Column(
+          crossAxisAlignment: CrossAxisAlignment.stretch,
+          children: [
+            Text(
+              isBangla ? '৭ দিনের ওজন trend' : 'Seven-day weight trend',
+              style: theme.textTheme.titleMedium?.copyWith(
+                fontWeight: FontWeight.w600,
+              ),
+            ),
+            const SizedBox(height: 4),
+            Text(
+              isBangla
+                  ? 'ওজন শুধু যেদিন save করা হয়েছে, সেই দিনেই দেখানো হবে।'
+                  : 'Weight appears only on days where an entry was saved.',
+              style: theme.textTheme.bodySmall?.copyWith(
+                color: colorScheme.onSurfaceVariant,
+              ),
+            ),
+            const SizedBox(height: 18),
+            if (weights.isEmpty)
+              Container(
+                padding: const EdgeInsets.all(18),
+                decoration: BoxDecoration(
+                  color: colorScheme.surfaceContainerHigh,
+                  borderRadius: BorderRadius.circular(14),
+                ),
+                child: Text(
+                  isBangla
+                      ? 'গত ৭ দিনে কোনো ওজন সংরক্ষণ করা হয়নি।'
+                      : 'No weight has been saved in the last seven days.',
+                  textAlign: TextAlign.center,
+                ),
+              )
+            else
+              SizedBox(
+                height: 180,
+                child: Row(
+                  crossAxisAlignment: CrossAxisAlignment.end,
+                  children: points
+                      .map((point) {
+                        final weight = point.weightKg;
+                        final normalized = weight == null
+                            ? 0.0
+                            : range < 0.1
+                            ? 0.55
+                            : ((weight - minimumWeight) / range)
+                                  .clamp(0.0, 1.0)
+                                  .toDouble();
+                        final barHeight = weight == null
+                            ? 6.0
+                            : 34.0 + (normalized * 74);
+
+                        return Expanded(
+                          child: Padding(
+                            padding: const EdgeInsets.symmetric(horizontal: 3),
+                            child: Column(
+                              mainAxisAlignment: MainAxisAlignment.end,
+                              children: [
+                                SizedBox(
+                                  height: 24,
+                                  child: FittedBox(
+                                    fit: BoxFit.scaleDown,
+                                    child: Text(
+                                      weight == null
+                                          ? '—'
+                                          : weight.toStringAsFixed(1),
+                                      style: theme.textTheme.labelSmall
+                                          ?.copyWith(
+                                            fontWeight: FontWeight.w600,
+                                          ),
+                                    ),
+                                  ),
+                                ),
+                                const SizedBox(height: 5),
+                                SizedBox(
+                                  height: 108,
+                                  child: Align(
+                                    alignment: Alignment.bottomCenter,
+                                    child: AnimatedContainer(
+                                      duration: const Duration(
+                                        milliseconds: 220,
+                                      ),
+                                      curve: Curves.easeOut,
+                                      width: 22,
+                                      height: barHeight,
+                                      decoration: BoxDecoration(
+                                        color: weight == null
+                                            ? colorScheme
+                                                  .surfaceContainerHighest
+                                            : colorScheme.primary,
+                                        borderRadius:
+                                            const BorderRadius.vertical(
+                                              top: Radius.circular(7),
+                                            ),
+                                      ),
+                                    ),
+                                  ),
+                                ),
+                                const SizedBox(height: 8),
+                                Text(
+                                  dayLabelBuilder(point.date),
+                                  maxLines: 1,
+                                  overflow: TextOverflow.ellipsis,
+                                  style: theme.textTheme.labelSmall?.copyWith(
+                                    color: colorScheme.onSurfaceVariant,
+                                  ),
+                                ),
+                              ],
+                            ),
+                          ),
+                        );
+                      })
+                      .toList(growable: false),
+                ),
+              ),
+          ],
         ),
       ),
     );
