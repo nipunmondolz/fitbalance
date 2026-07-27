@@ -35,8 +35,17 @@ class HabitStorageService {
 
   final SharedPreferencesAsync _preferences = SharedPreferencesAsync();
 
-  Future<List<bool>> loadTodayCompletions(int habitCount) async {
-    final savedValues = await _preferences.getStringList(_todayKey);
+  Future<List<bool>> loadTodayCompletions(int habitCount) {
+    return loadCompletionsForDate(DateTime.now(), habitCount);
+  }
+
+  Future<List<bool>> loadCompletionsForDate(
+    DateTime date,
+    int habitCount,
+  ) async {
+    final savedValues = await _preferences.getStringList(
+      _completionKeyForDate(date),
+    );
 
     if (savedValues == null || savedValues.length != habitCount) {
       return List<bool>.filled(habitCount, false);
@@ -54,11 +63,20 @@ class HabitStorageService {
         .map((isCompleted) => isCompleted ? '1' : '0')
         .toList(growable: false);
 
-    return _preferences.setStringList(_todayKey, values);
+    return _preferences.setStringList(
+      _completionKeyForDate(DateTime.now()),
+      values,
+    );
   }
 
-  Future<StoredDailyCheckIn?> loadTodayCheckIn() async {
-    final savedValues = await _preferences.getStringList(_todayCheckInKey);
+  Future<StoredDailyCheckIn?> loadTodayCheckIn() {
+    return loadCheckInForDate(DateTime.now());
+  }
+
+  Future<StoredDailyCheckIn?> loadCheckInForDate(DateTime date) async {
+    final savedValues = await _preferences.getStringList(
+      _checkInKeyForDate(date),
+    );
 
     if (savedValues == null || savedValues.length != 3) {
       return null;
@@ -88,7 +106,7 @@ class HabitStorageService {
     required int energyLevel,
     required String note,
   }) {
-    return _preferences.setStringList(_todayCheckInKey, [
+    return _preferences.setStringList(_checkInKeyForDate(DateTime.now()), [
       moodIndex.toString(),
       energyLevel.toString(),
       note,
@@ -154,15 +172,18 @@ class HabitStorageService {
     return _preferences.setStringList(_reminderSettingsKey, values);
   }
 
-  String get _todayKey => '$_completionKeyPrefix$_todayDate';
+  String _completionKeyForDate(DateTime date) {
+    return '$_completionKeyPrefix${_dateText(date)}';
+  }
 
-  String get _todayCheckInKey => '$_checkInKeyPrefix$_todayDate';
+  String _checkInKeyForDate(DateTime date) {
+    return '$_checkInKeyPrefix${_dateText(date)}';
+  }
 
-  String get _todayDate {
-    final now = DateTime.now();
-    final month = now.month.toString().padLeft(2, '0');
-    final day = now.day.toString().padLeft(2, '0');
+  String _dateText(DateTime date) {
+    final month = date.month.toString().padLeft(2, '0');
+    final day = date.day.toString().padLeft(2, '0');
 
-    return '${now.year}-$month-$day';
+    return '${date.year}-$month-$day';
   }
 }

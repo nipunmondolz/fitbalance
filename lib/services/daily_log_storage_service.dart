@@ -84,8 +84,12 @@ class DailyLogStorageService {
 
   final SharedPreferencesAsync _preferences = SharedPreferencesAsync();
 
-  Future<List<StoredDailyLogEntry>> loadTodayEntries() async {
-    final savedJson = await _preferences.getString(_todayKey);
+  Future<List<StoredDailyLogEntry>> loadTodayEntries() {
+    return loadEntriesForDate(DateTime.now());
+  }
+
+  Future<List<StoredDailyLogEntry>> loadEntriesForDate(DateTime date) async {
+    final savedJson = await _preferences.getString(_keyForDate(date));
 
     if (savedJson == null || savedJson.isEmpty) {
       return const [];
@@ -107,8 +111,12 @@ class DailyLogStorageService {
     }
   }
 
-  Future<DailyLogSummary> loadTodaySummary() async {
-    final entries = await loadTodayEntries();
+  Future<DailyLogSummary> loadTodaySummary() {
+    return loadSummaryForDate(DateTime.now());
+  }
+
+  Future<DailyLogSummary> loadSummaryForDate(DateTime date) async {
+    final entries = await loadEntriesForDate(date);
 
     var calories = 0;
     var waterGlasses = 0;
@@ -146,8 +154,10 @@ class DailyLogStorageService {
   }
 
   Future<void> saveTodayEntries(List<StoredDailyLogEntry> entries) async {
+    final todayKey = _keyForDate(DateTime.now());
+
     if (entries.isEmpty) {
-      await _preferences.remove(_todayKey);
+      await _preferences.remove(todayKey);
       return;
     }
 
@@ -155,16 +165,17 @@ class DailyLogStorageService {
         .map((entry) => entry.toJson())
         .toList(growable: false);
 
-    await _preferences.setString(_todayKey, jsonEncode(encodedEntries));
+    await _preferences.setString(todayKey, jsonEncode(encodedEntries));
   }
 
-  String get _todayKey => '$_dailyLogKeyPrefix$_todayDate';
+  String _keyForDate(DateTime date) {
+    return '$_dailyLogKeyPrefix${_dateText(date)}';
+  }
 
-  String get _todayDate {
-    final now = DateTime.now();
-    final month = now.month.toString().padLeft(2, '0');
-    final day = now.day.toString().padLeft(2, '0');
+  String _dateText(DateTime date) {
+    final month = date.month.toString().padLeft(2, '0');
+    final day = date.day.toString().padLeft(2, '0');
 
-    return '${now.year}-$month-$day';
+    return '${date.year}-$month-$day';
   }
 }

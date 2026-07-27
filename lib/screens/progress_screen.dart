@@ -24,11 +24,40 @@ class ProgressScreen extends StatefulWidget {
   State<ProgressScreen> createState() => _ProgressScreenState();
 }
 
+class _ProgressDay {
+  const _ProgressDay({
+    required this.date,
+    required this.dailyLogSummary,
+    required this.habitCompletions,
+    required this.dailyCheckIn,
+  });
+
+  final DateTime date;
+  final DailyLogSummary dailyLogSummary;
+  final List<bool> habitCompletions;
+  final StoredDailyCheckIn? dailyCheckIn;
+
+  int get completedHabitCount =>
+      habitCompletions.where((isCompleted) => isCompleted).length;
+
+  bool get hasSavedData =>
+      dailyLogSummary.calories > 0 ||
+      dailyLogSummary.waterGlasses > 0 ||
+      dailyLogSummary.softDrinkMl > 0 ||
+      dailyLogSummary.exerciseMinutes > 0 ||
+      dailyLogSummary.sleepHours > 0 ||
+      completedHabitCount > 0 ||
+      dailyCheckIn != null;
+}
+
 class _ProgressScreenState extends State<ProgressScreen>
     with WidgetsBindingObserver {
+  static const int _habitCount = 3;
+
   DailyLogSummary _dailyLogSummary = DailyLogSummary.empty;
-  List<bool> _habitCompletions = [false, false, false];
+  List<bool> _habitCompletions = List<bool>.filled(_habitCount, false);
   StoredDailyCheckIn? _dailyCheckIn;
+  List<_ProgressDay> _sevenDayProgress = const [];
 
   bool _isLoading = true;
   int _loadGeneration = 0;
@@ -76,28 +105,52 @@ class _ProgressScreenState extends State<ProgressScreen>
     unawaited(_loadProgress());
   }
 
+  Future<_ProgressDay> _loadProgressDay(DateTime date) async {
+    final dailyLogFuture = DailyLogStorageService.instance.loadSummaryForDate(
+      date,
+    );
+    final habitFuture = HabitStorageService.instance.loadCompletionsForDate(
+      date,
+      _habitCount,
+    );
+    final checkInFuture = HabitStorageService.instance.loadCheckInForDate(date);
+
+    final dailyLogSummary = await dailyLogFuture;
+    final habitCompletions = await habitFuture;
+    final dailyCheckIn = await checkInFuture;
+
+    return _ProgressDay(
+      date: date,
+      dailyLogSummary: dailyLogSummary,
+      habitCompletions: habitCompletions,
+      dailyCheckIn: dailyCheckIn,
+    );
+  }
+
   Future<void> _loadProgress() async {
     final loadGeneration = ++_loadGeneration;
+    final now = DateTime.now();
+    final today = DateTime(now.year, now.month, now.day);
+    final dates = List<DateTime>.generate(
+      7,
+      (index) => today.subtract(Duration(days: index)),
+      growable: false,
+    );
 
     try {
-      final dailyLogFuture = DailyLogStorageService.instance.loadTodaySummary();
-      final habitFuture = HabitStorageService.instance.loadTodayCompletions(
-        _habitCompletions.length,
-      );
-      final checkInFuture = HabitStorageService.instance.loadTodayCheckIn();
-
-      final dailyLogSummary = await dailyLogFuture;
-      final habitCompletions = await habitFuture;
-      final dailyCheckIn = await checkInFuture;
+      final sevenDayProgress = await Future.wait(dates.map(_loadProgressDay));
 
       if (!mounted || loadGeneration != _loadGeneration) {
         return;
       }
 
+      final todayProgress = sevenDayProgress.first;
+
       setState(() {
-        _dailyLogSummary = dailyLogSummary;
-        _habitCompletions = habitCompletions;
-        _dailyCheckIn = dailyCheckIn;
+        _dailyLogSummary = todayProgress.dailyLogSummary;
+        _habitCompletions = todayProgress.habitCompletions;
+        _dailyCheckIn = todayProgress.dailyCheckIn;
+        _sevenDayProgress = sevenDayProgress;
         _isLoading = false;
       });
     } catch (_) {
@@ -138,6 +191,50 @@ class _ProgressScreenState extends State<ProgressScreen>
     return widget.isBangla
         ? 'মুড: ${_moodName(checkIn.moodIndex)} • শক্তি: ${checkIn.energyLevel}/৫'
         : 'Mood: ${_moodName(checkIn.moodIndex)} • Energy: ${checkIn.energyLevel}/5';
+  }
+
+  String _dateLabel(DateTime date, int index) {
+    const monthsEn = [
+      'Jan',
+      'Feb',
+      'Mar',
+      'Apr',
+      'May',
+      'Jun',
+      'Jul',
+      'Aug',
+      'Sep',
+      'Oct',
+      'Nov',
+      'Dec',
+    ];
+    const monthsBn = [
+      'জানু',
+      'ফেব',
+      'মার্চ',
+      'এপ্রিল',
+      'মে',
+      'জুন',
+      'জুলাই',
+      'আগস্ট',
+      'সেপ্টে',
+      'অক্টো',
+      'নভে',
+      'ডিসে',
+    ];
+
+    final relativeLabel = switch (index) {
+      0 => widget.isBangla ? 'আজ' : 'Today',
+      1 => widget.isBangla ? 'গতকাল' : 'Yesterday',
+      _ => null,
+    };
+
+    final month = widget.isBangla
+        ? monthsBn[date.month - 1]
+        : monthsEn[date.month - 1];
+    final dateText = '${date.day} $month';
+
+    return relativeLabel == null ? dateText : '$relativeLabel • $dateText';
   }
 
   @override
@@ -325,7 +422,43 @@ class _ProgressScreenState extends State<ProgressScreen>
                   ],
                 ),
               ),
-              const SizedBox(height: 14),
+              const SizedBox(height: 24),
+              Text(
+                widget.isBangla ? 'গত ৭ দিনের ইতিহাস' : 'Last 7 days',
+                style: theme.textTheme.titleLarge?.copyWith(
+                  fontWeight: FontWeight.bold,
+                ),
+              ),
+              const SizedBox(height: 6),
+              Text(
+                widget.isBangla
+                    ? 'ডিভাইসে সংরক্ষিত প্রতিদিনের তথ্য এখানে দেখা যাবে।'
+                    : 'Daily records saved on this device appear here.',
+                style: theme.textTheme.bodyMedium?.copyWith(
+                  color: colorScheme.onSurfaceVariant,
+                ),
+              ),
+              const SizedBox(height: 12),
+              if (_sevenDayProgress.isEmpty && !_isLoading)
+                _EmptyHistoryCard(
+                  message: widget.isBangla
+                      ? 'এখনো কোনো history পাওয়া যায়নি।'
+                      : 'No history is available yet.',
+                )
+              else
+                ...List<Widget>.generate(_sevenDayProgress.length, (index) {
+                  final progressDay = _sevenDayProgress[index];
+
+                  return Padding(
+                    padding: const EdgeInsets.only(bottom: 10),
+                    child: _SevenDayProgressCard(
+                      isBangla: widget.isBangla,
+                      dateLabel: _dateLabel(progressDay.date, index),
+                      progressDay: progressDay,
+                    ),
+                  );
+                }),
+              const SizedBox(height: 4),
               Container(
                 padding: const EdgeInsets.all(16),
                 decoration: BoxDecoration(
@@ -343,8 +476,8 @@ class _ProgressScreenState extends State<ProgressScreen>
                     Expanded(
                       child: Text(
                         widget.isBangla
-                            ? 'এই ধাপে আজকের তথ্য দেখানো হচ্ছে। পরবর্তী ধাপে ৭ দিনের history ও chart যোগ হবে।'
-                            : 'This step shows today’s data. Seven-day history and charts will be added next.',
+                            ? '৭ দিনের history এখন প্রস্তুত। পরবর্তী ধাপে lightweight chart ও average summary যোগ হবে।'
+                            : 'Seven-day history is now ready. Lightweight charts and average summaries will be added next.',
                         style: theme.textTheme.bodyMedium?.copyWith(
                           color: colorScheme.onSecondaryContainer,
                         ),
@@ -442,6 +575,224 @@ class _ProgressMetric extends StatelessWidget {
           ),
         ),
       ],
+    );
+  }
+}
+
+class _SevenDayProgressCard extends StatelessWidget {
+  const _SevenDayProgressCard({
+    required this.isBangla,
+    required this.dateLabel,
+    required this.progressDay,
+  });
+
+  final bool isBangla;
+  final String dateLabel;
+  final _ProgressDay progressDay;
+
+  @override
+  Widget build(BuildContext context) {
+    final theme = Theme.of(context);
+    final colorScheme = theme.colorScheme;
+    final summary = progressDay.dailyLogSummary;
+    final checkIn = progressDay.dailyCheckIn;
+
+    return Card(
+      margin: EdgeInsets.zero,
+      elevation: 0,
+      color: colorScheme.surfaceContainerLowest,
+      shape: RoundedRectangleBorder(
+        borderRadius: BorderRadius.circular(16),
+        side: BorderSide(color: colorScheme.outlineVariant),
+      ),
+      child: Padding(
+        padding: const EdgeInsets.all(16),
+        child: Column(
+          crossAxisAlignment: CrossAxisAlignment.stretch,
+          children: [
+            Row(
+              children: [
+                Expanded(
+                  child: Text(
+                    dateLabel,
+                    style: theme.textTheme.titleMedium?.copyWith(
+                      fontWeight: FontWeight.bold,
+                    ),
+                  ),
+                ),
+                Container(
+                  padding: const EdgeInsets.symmetric(
+                    horizontal: 10,
+                    vertical: 5,
+                  ),
+                  decoration: BoxDecoration(
+                    color: progressDay.hasSavedData
+                        ? colorScheme.primaryContainer
+                        : colorScheme.surfaceContainerHighest,
+                    borderRadius: BorderRadius.circular(20),
+                  ),
+                  child: Text(
+                    progressDay.hasSavedData
+                        ? (isBangla ? 'তথ্য আছে' : 'Saved')
+                        : (isBangla ? 'তথ্য নেই' : 'No data'),
+                    style: theme.textTheme.labelSmall?.copyWith(
+                      color: progressDay.hasSavedData
+                          ? colorScheme.onPrimaryContainer
+                          : colorScheme.onSurfaceVariant,
+                      fontWeight: FontWeight.w600,
+                    ),
+                  ),
+                ),
+              ],
+            ),
+            const SizedBox(height: 14),
+            LayoutBuilder(
+              builder: (context, constraints) {
+                final itemWidth = (constraints.maxWidth - 12) / 2;
+
+                return Wrap(
+                  spacing: 12,
+                  runSpacing: 12,
+                  children: [
+                    SizedBox(
+                      width: itemWidth,
+                      child: _HistoryMetric(
+                        icon: Icons.local_fire_department,
+                        value: '${summary.calories}',
+                        label: 'kcal',
+                      ),
+                    ),
+                    SizedBox(
+                      width: itemWidth,
+                      child: _HistoryMetric(
+                        icon: Icons.water_drop,
+                        value: '${summary.waterGlasses}',
+                        label: isBangla ? 'গ্লাস পানি' : 'glasses water',
+                      ),
+                    ),
+                    SizedBox(
+                      width: itemWidth,
+                      child: _HistoryMetric(
+                        icon: Icons.directions_run,
+                        value: '${summary.exerciseMinutes}',
+                        label: isBangla ? 'মিনিট ব্যায়াম' : 'exercise min',
+                      ),
+                    ),
+                    SizedBox(
+                      width: itemWidth,
+                      child: _HistoryMetric(
+                        icon: Icons.bedtime,
+                        value: summary.sleepHours.toStringAsFixed(1),
+                        label: isBangla ? 'ঘণ্টা ঘুম' : 'sleep hours',
+                      ),
+                    ),
+                    SizedBox(
+                      width: itemWidth,
+                      child: _HistoryMetric(
+                        icon: Icons.check_circle_outline,
+                        value:
+                            '${progressDay.completedHabitCount}/${progressDay.habitCompletions.length}',
+                        label: isBangla ? 'অভ্যাস' : 'habits',
+                      ),
+                    ),
+                    SizedBox(
+                      width: itemWidth,
+                      child: _HistoryMetric(
+                        icon: checkIn == null
+                            ? Icons.fact_check_outlined
+                            : Icons.fact_check,
+                        value: checkIn == null
+                            ? '—'
+                            : '${checkIn.energyLevel}/5',
+                        label: isBangla ? 'চেক-ইন' : 'check-in',
+                      ),
+                    ),
+                  ],
+                );
+              },
+            ),
+            if (summary.softDrinkMl > 0) ...[
+              const SizedBox(height: 12),
+              Text(
+                isBangla
+                    ? 'কোমল পানীয়: ${summary.softDrinkMl} ml'
+                    : 'Soft drink: ${summary.softDrinkMl} ml',
+                style: theme.textTheme.bodySmall?.copyWith(
+                  color: colorScheme.onSurfaceVariant,
+                ),
+              ),
+            ],
+          ],
+        ),
+      ),
+    );
+  }
+}
+
+class _HistoryMetric extends StatelessWidget {
+  const _HistoryMetric({
+    required this.icon,
+    required this.value,
+    required this.label,
+  });
+
+  final IconData icon;
+  final String value;
+  final String label;
+
+  @override
+  Widget build(BuildContext context) {
+    final theme = Theme.of(context);
+
+    return Row(
+      children: [
+        Icon(icon, size: 20, color: theme.colorScheme.primary),
+        const SizedBox(width: 8),
+        Expanded(
+          child: Column(
+            crossAxisAlignment: CrossAxisAlignment.start,
+            children: [
+              Text(
+                value,
+                maxLines: 1,
+                overflow: TextOverflow.ellipsis,
+                style: theme.textTheme.labelLarge?.copyWith(
+                  fontWeight: FontWeight.bold,
+                ),
+              ),
+              Text(
+                label,
+                maxLines: 1,
+                overflow: TextOverflow.ellipsis,
+                style: theme.textTheme.bodySmall,
+              ),
+            ],
+          ),
+        ),
+      ],
+    );
+  }
+}
+
+class _EmptyHistoryCard extends StatelessWidget {
+  const _EmptyHistoryCard({required this.message});
+
+  final String message;
+
+  @override
+  Widget build(BuildContext context) {
+    return Card(
+      margin: const EdgeInsets.only(bottom: 10),
+      child: Padding(
+        padding: const EdgeInsets.all(22),
+        child: Row(
+          children: [
+            const Icon(Icons.history),
+            const SizedBox(width: 12),
+            Expanded(child: Text(message)),
+          ],
+        ),
+      ),
     );
   }
 }
