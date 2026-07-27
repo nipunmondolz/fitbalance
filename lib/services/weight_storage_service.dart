@@ -86,13 +86,30 @@ class WeightStorageService {
   Future<List<StoredWeightEntry>> saveWeightForDate({
     required DateTime date,
     required double weightKg,
+  }) {
+    return saveWeightEntry(date: date, weightKg: weightKg);
+  }
+
+  Future<List<StoredWeightEntry>> saveWeightEntry({
+    required DateTime date,
+    required double weightKg,
+    DateTime? replacingDate,
   }) async {
     if (!weightKg.isFinite || weightKg < 20 || weightKg > 400) {
       throw const FormatException('Invalid weight value');
     }
 
-    final normalizedDate = DateTime(date.year, date.month, date.day);
+    final normalizedDate = _normalizeDate(date);
     final entries = List<StoredWeightEntry>.of(await loadEntries());
+
+    if (replacingDate != null) {
+      final normalizedReplacingDate = _normalizeDate(replacingDate);
+
+      entries.removeWhere(
+        (entry) => _isSameDate(entry.date, normalizedReplacingDate),
+      );
+    }
+
     final existingIndex = entries.indexWhere(
       (entry) => _isSameDate(entry.date, normalizedDate),
     );
@@ -107,7 +124,26 @@ class WeightStorageService {
       entries.add(updatedEntry);
     }
 
+    return _saveEntries(entries);
+  }
+
+  Future<List<StoredWeightEntry>> deleteWeightForDate(DateTime date) async {
+    final normalizedDate = _normalizeDate(date);
+    final entries = List<StoredWeightEntry>.of(await loadEntries())
+      ..removeWhere((entry) => _isSameDate(entry.date, normalizedDate));
+
+    return _saveEntries(entries);
+  }
+
+  Future<List<StoredWeightEntry>> _saveEntries(
+    List<StoredWeightEntry> entries,
+  ) async {
     entries.sort((first, second) => first.date.compareTo(second.date));
+
+    if (entries.isEmpty) {
+      await _preferences.remove(_weightEntriesKey);
+      return const [];
+    }
 
     await _preferences.setString(
       _weightEntriesKey,
@@ -117,6 +153,10 @@ class WeightStorageService {
     );
 
     return List<StoredWeightEntry>.unmodifiable(entries);
+  }
+
+  DateTime _normalizeDate(DateTime date) {
+    return DateTime(date.year, date.month, date.day);
   }
 
   bool _isSameDate(DateTime first, DateTime second) {

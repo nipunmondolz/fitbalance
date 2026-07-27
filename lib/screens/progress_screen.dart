@@ -40,6 +40,13 @@ class _ChartBarData {
   final String valueText;
 }
 
+class _WeightEntryResult {
+  const _WeightEntryResult({required this.date, required this.weightKg});
+
+  final DateTime date;
+  final double weightKg;
+}
+
 class _WeightTrendPoint {
   const _WeightTrendPoint({required this.date, required this.weightKg});
 
@@ -318,21 +325,61 @@ class _ProgressScreenState extends State<ProgressScreen>
     return '$day/$month/${date.year}';
   }
 
-  Future<void> _showWeightEntrySheet() async {
-    final weightKg = await showModalBottomSheet<double>(
+  Future<void> _showTodayWeightEntrySheet() {
+    return _showWeightEditor(
+      initialDate: DateTime.now(),
+      initialWeight: _todayWeight?.weightKg ?? _latestWeight?.weightKg,
+      isEditing: _todayWeight != null,
+      allowDateSelection: false,
+      replacingDate: _todayWeight?.date,
+    );
+  }
+
+  Future<void> _showPastWeightEntrySheet() {
+    final now = DateTime.now();
+    final yesterday = DateTime(now.year, now.month, now.day - 1);
+
+    return _showWeightEditor(
+      initialDate: yesterday,
+      initialWeight: _latestWeight?.weightKg,
+      isEditing: false,
+      allowDateSelection: true,
+    );
+  }
+
+  Future<void> _editWeightEntry(StoredWeightEntry entry) {
+    return _showWeightEditor(
+      initialDate: entry.date,
+      initialWeight: entry.weightKg,
+      isEditing: true,
+      allowDateSelection: true,
+      replacingDate: entry.date,
+    );
+  }
+
+  Future<void> _showWeightEditor({
+    required DateTime initialDate,
+    required double? initialWeight,
+    required bool isEditing,
+    required bool allowDateSelection,
+    DateTime? replacingDate,
+  }) async {
+    final result = await showModalBottomSheet<_WeightEntryResult>(
       context: context,
       isScrollControlled: true,
       showDragHandle: true,
       builder: (sheetContext) {
         return _WeightEntrySheet(
           isBangla: widget.isBangla,
-          initialWeight: _todayWeight?.weightKg ?? _latestWeight?.weightKg,
-          isUpdatingToday: _todayWeight != null,
+          initialDate: initialDate,
+          initialWeight: initialWeight,
+          isEditing: isEditing,
+          allowDateSelection: allowDateSelection,
         );
       },
     );
 
-    if (weightKg == null || !mounted) {
+    if (result == null || !mounted) {
       return;
     }
 
@@ -342,7 +389,11 @@ class _ProgressScreenState extends State<ProgressScreen>
 
     try {
       final updatedEntries = await WeightStorageService.instance
-          .saveWeightForDate(date: DateTime.now(), weightKg: weightKg);
+          .saveWeightEntry(
+            date: result.date,
+            weightKg: result.weightKg,
+            replacingDate: replacingDate,
+          );
 
       if (!mounted) {
         return;
@@ -358,8 +409,8 @@ class _ProgressScreenState extends State<ProgressScreen>
           SnackBar(
             content: Text(
               widget.isBangla
-                  ? 'আজকের ওজন সংরক্ষণ হয়েছে।'
-                  : "Today's weight has been saved.",
+                  ? 'ওজন সংরক্ষণ হয়েছে।'
+                  : 'The weight has been saved.',
             ),
           ),
         );
@@ -376,6 +427,89 @@ class _ProgressScreenState extends State<ProgressScreen>
               widget.isBangla
                   ? 'ওজন সংরক্ষণ করা যায়নি। আবার চেষ্টা করুন।'
                   : 'The weight could not be saved. Please try again.',
+            ),
+          ),
+        );
+    } finally {
+      if (mounted) {
+        setState(() {
+          _isSavingWeight = false;
+        });
+      }
+    }
+  }
+
+  Future<void> _deleteWeightEntry(StoredWeightEntry entry) async {
+    final shouldDelete = await showDialog<bool>(
+      context: context,
+      builder: (dialogContext) {
+        return AlertDialog(
+          title: Text(
+            widget.isBangla ? 'ওজনের এন্ট্রি মুছবেন?' : 'Delete weight entry?',
+          ),
+          content: Text(
+            widget.isBangla
+                ? '${_weightDateLabel(entry.date)} তারিখের ${entry.weightKg.toStringAsFixed(1)} kg ওজনটি মুছে যাবে।'
+                : '${entry.weightKg.toStringAsFixed(1)} kg saved on ${_weightDateLabel(entry.date)} will be removed.',
+          ),
+          actions: [
+            TextButton(
+              onPressed: () => Navigator.pop(dialogContext, false),
+              child: Text(widget.isBangla ? 'বাতিল' : 'Cancel'),
+            ),
+            FilledButton(
+              onPressed: () => Navigator.pop(dialogContext, true),
+              child: Text(widget.isBangla ? 'মুছুন' : 'Delete'),
+            ),
+          ],
+        );
+      },
+    );
+
+    if (shouldDelete != true || !mounted) {
+      return;
+    }
+
+    setState(() {
+      _isSavingWeight = true;
+    });
+
+    try {
+      final updatedEntries = await WeightStorageService.instance
+          .deleteWeightForDate(entry.date);
+
+      if (!mounted) {
+        return;
+      }
+
+      setState(() {
+        _weightEntries = updatedEntries;
+      });
+
+      ScaffoldMessenger.of(context)
+        ..hideCurrentSnackBar()
+        ..showSnackBar(
+          SnackBar(
+            content: Text(
+              widget.isBangla
+                  ? 'ওজনের এন্ট্রি মুছে ফেলা হয়েছে।'
+                  : 'The weight entry has been deleted.',
+            ),
+          ),
+        );
+    } catch (_) {
+      if (!mounted) {
+        return;
+      }
+
+      ScaffoldMessenger.of(context)
+        ..hideCurrentSnackBar()
+        ..showSnackBar(
+          SnackBar(
+            content: Text(
+              widget.isBangla
+                  ? 'ওজনের এন্ট্রি মুছতে সমস্যা হয়েছে।'
+                  : 'The weight entry could not be deleted.',
             ),
           ),
         );
@@ -627,7 +761,8 @@ class _ProgressScreenState extends State<ProgressScreen>
                     : _weightDateLabel(_latestWeight!.date),
                 isSaving: _isSavingWeight,
                 hasTodayWeight: _todayWeight != null,
-                onLogWeight: _showWeightEntrySheet,
+                onLogTodayWeight: _showTodayWeightEntrySheet,
+                onAddPastWeight: _showPastWeightEntrySheet,
                 signedChangeBuilder: _signedWeightChange,
               ),
               const SizedBox(height: 14),
@@ -635,6 +770,15 @@ class _ProgressScreenState extends State<ProgressScreen>
                 isBangla: widget.isBangla,
                 points: _weightTrendPoints,
                 dayLabelBuilder: _shortDayLabel,
+              ),
+              const SizedBox(height: 14),
+              _WeightHistoryCard(
+                isBangla: widget.isBangla,
+                entries: _weightEntries.reversed.toList(growable: false),
+                isBusy: _isSavingWeight,
+                dateLabelBuilder: _weightDateLabel,
+                onEdit: _editWeightEntry,
+                onDelete: _deleteWeightEntry,
               ),
               const SizedBox(height: 14),
               _ProgressSectionCard(
@@ -886,13 +1030,17 @@ class _ProgressScreenState extends State<ProgressScreen>
 class _WeightEntrySheet extends StatefulWidget {
   const _WeightEntrySheet({
     required this.isBangla,
+    required this.initialDate,
     required this.initialWeight,
-    required this.isUpdatingToday,
+    required this.isEditing,
+    required this.allowDateSelection,
   });
 
   final bool isBangla;
+  final DateTime initialDate;
   final double? initialWeight;
-  final bool isUpdatingToday;
+  final bool isEditing;
+  final bool allowDateSelection;
 
   @override
   State<_WeightEntrySheet> createState() => _WeightEntrySheetState();
@@ -900,14 +1048,46 @@ class _WeightEntrySheet extends StatefulWidget {
 
 class _WeightEntrySheetState extends State<_WeightEntrySheet> {
   late final TextEditingController _controller;
+  late DateTime _selectedDate;
   String? _errorText;
 
   @override
   void initState() {
     super.initState();
+    _selectedDate = DateTime(
+      widget.initialDate.year,
+      widget.initialDate.month,
+      widget.initialDate.day,
+    );
     _controller = TextEditingController(
       text: widget.initialWeight?.toStringAsFixed(1) ?? '',
     );
+  }
+
+  String _dateText(DateTime date) {
+    final day = date.day.toString().padLeft(2, '0');
+    final month = date.month.toString().padLeft(2, '0');
+    return '$day/$month/${date.year}';
+  }
+
+  Future<void> _selectDate() async {
+    final now = DateTime.now();
+    final today = DateTime(now.year, now.month, now.day);
+    final firstDate = DateTime(today.year - 10, today.month, today.day);
+
+    final selectedDate = await showDatePicker(
+      context: context,
+      initialDate: _selectedDate,
+      firstDate: firstDate,
+      lastDate: today,
+      helpText: widget.isBangla ? 'ওজনের তারিখ বেছে নিন' : 'Select weight date',
+    );
+
+    if (selectedDate != null && mounted) {
+      setState(() {
+        _selectedDate = selectedDate;
+      });
+    }
   }
 
   double? _validatedWeight() {
@@ -931,7 +1111,9 @@ class _WeightEntrySheetState extends State<_WeightEntrySheet> {
     final weightKg = _validatedWeight();
 
     if (weightKg != null) {
-      Navigator.of(context).pop(weightKg);
+      Navigator.of(
+        context,
+      ).pop(_WeightEntryResult(date: _selectedDate, weightKg: weightKg));
     }
   }
 
@@ -956,13 +1138,13 @@ class _WeightEntrySheetState extends State<_WeightEntrySheet> {
           crossAxisAlignment: CrossAxisAlignment.stretch,
           children: [
             Text(
-              widget.isUpdatingToday
+              widget.isEditing
                   ? (widget.isBangla
-                        ? 'আজকের ওজন আপডেট করুন'
-                        : "Update today's weight")
+                        ? 'ওজনের এন্ট্রি সম্পাদনা করুন'
+                        : 'Edit weight entry')
                   : (widget.isBangla
-                        ? 'আজকের ওজন যোগ করুন'
-                        : "Log today's weight"),
+                        ? 'ওজনের এন্ট্রি যোগ করুন'
+                        : 'Add weight entry'),
               style: Theme.of(
                 context,
               ).textTheme.titleLarge?.copyWith(fontWeight: FontWeight.bold),
@@ -970,10 +1152,23 @@ class _WeightEntrySheetState extends State<_WeightEntrySheet> {
             const SizedBox(height: 6),
             Text(
               widget.isBangla
-                  ? 'একই দিনে আবার save করলে আগের ওজনটি update হবে।'
-                  : 'Saving again on the same day updates the existing entry.',
+                  ? 'একই তারিখে আবার save করলে আগের ওজনটি update হবে।'
+                  : 'Saving on an existing date updates that weight entry.',
             ),
             const SizedBox(height: 18),
+            if (widget.allowDateSelection) ...[
+              Text(
+                widget.isBangla ? 'তারিখ' : 'Date',
+                style: Theme.of(context).textTheme.labelLarge,
+              ),
+              const SizedBox(height: 8),
+              OutlinedButton.icon(
+                onPressed: _selectDate,
+                icon: const Icon(Icons.calendar_month_outlined),
+                label: Text(_dateText(_selectedDate)),
+              ),
+              const SizedBox(height: 16),
+            ],
             TextField(
               controller: _controller,
               autofocus: true,
@@ -1019,7 +1214,8 @@ class _WeightTrackingCard extends StatelessWidget {
     required this.latestDateLabel,
     required this.isSaving,
     required this.hasTodayWeight,
-    required this.onLogWeight,
+    required this.onLogTodayWeight,
+    required this.onAddPastWeight,
     required this.signedChangeBuilder,
   });
 
@@ -1030,7 +1226,8 @@ class _WeightTrackingCard extends StatelessWidget {
   final String? latestDateLabel;
   final bool isSaving;
   final bool hasTodayWeight;
-  final VoidCallback onLogWeight;
+  final VoidCallback onLogTodayWeight;
+  final VoidCallback onAddPastWeight;
   final String Function(double change) signedChangeBuilder;
 
   @override
@@ -1126,7 +1323,7 @@ class _WeightTrackingCard extends StatelessWidget {
             ],
             const SizedBox(height: 18),
             FilledButton.icon(
-              onPressed: isSaving ? null : onLogWeight,
+              onPressed: isSaving ? null : onLogTodayWeight,
               icon: isSaving
                   ? const SizedBox.square(
                       dimension: 18,
@@ -1139,6 +1336,16 @@ class _WeightTrackingCard extends StatelessWidget {
                           ? 'আজকের ওজন আপডেট করুন'
                           : "Update today's weight")
                     : (isBangla ? 'আজকের ওজন যোগ করুন' : "Log today's weight"),
+              ),
+            ),
+            const SizedBox(height: 10),
+            OutlinedButton.icon(
+              onPressed: isSaving ? null : onAddPastWeight,
+              icon: const Icon(Icons.history),
+              label: Text(
+                isBangla
+                    ? 'আগের তারিখের ওজন যোগ করুন'
+                    : 'Add weight for a past date',
               ),
             ),
           ],
@@ -1334,6 +1541,120 @@ class _WeightTrendCard extends StatelessWidget {
                       .toList(growable: false),
                 ),
               ),
+          ],
+        ),
+      ),
+    );
+  }
+}
+
+class _WeightHistoryCard extends StatelessWidget {
+  const _WeightHistoryCard({
+    required this.isBangla,
+    required this.entries,
+    required this.isBusy,
+    required this.dateLabelBuilder,
+    required this.onEdit,
+    required this.onDelete,
+  });
+
+  final bool isBangla;
+  final List<StoredWeightEntry> entries;
+  final bool isBusy;
+  final String Function(DateTime date) dateLabelBuilder;
+  final ValueChanged<StoredWeightEntry> onEdit;
+  final ValueChanged<StoredWeightEntry> onDelete;
+
+  @override
+  Widget build(BuildContext context) {
+    final theme = Theme.of(context);
+    final colorScheme = theme.colorScheme;
+
+    return Card(
+      margin: EdgeInsets.zero,
+      elevation: 0,
+      color: colorScheme.surfaceContainerLowest,
+      shape: RoundedRectangleBorder(
+        borderRadius: BorderRadius.circular(18),
+        side: BorderSide(color: colorScheme.outlineVariant),
+      ),
+      child: Padding(
+        padding: const EdgeInsets.all(18),
+        child: Column(
+          crossAxisAlignment: CrossAxisAlignment.stretch,
+          children: [
+            Text(
+              isBangla ? 'ওজনের ইতিহাস' : 'Weight history',
+              style: theme.textTheme.titleMedium?.copyWith(
+                fontWeight: FontWeight.w600,
+              ),
+            ),
+            const SizedBox(height: 4),
+            Text(
+              isBangla
+                  ? 'সর্বশেষ entry উপরে দেখানো হচ্ছে।'
+                  : 'The newest entry appears first.',
+              style: theme.textTheme.bodySmall?.copyWith(
+                color: colorScheme.onSurfaceVariant,
+              ),
+            ),
+            const SizedBox(height: 14),
+            if (entries.isEmpty)
+              Container(
+                padding: const EdgeInsets.all(18),
+                decoration: BoxDecoration(
+                  color: colorScheme.surfaceContainerHigh,
+                  borderRadius: BorderRadius.circular(14),
+                ),
+                child: Text(
+                  isBangla
+                      ? 'এখনো কোনো ওজন সংরক্ষণ করা হয়নি।'
+                      : 'No weight entries have been saved yet.',
+                  textAlign: TextAlign.center,
+                ),
+              )
+            else
+              ...List<Widget>.generate(entries.length, (index) {
+                final entry = entries[index];
+
+                return Column(
+                  children: [
+                    ListTile(
+                      contentPadding: EdgeInsets.zero,
+                      leading: CircleAvatar(
+                        child: Icon(
+                          Icons.monitor_weight_outlined,
+                          color: colorScheme.onPrimaryContainer,
+                        ),
+                      ),
+                      title: Text(
+                        '${entry.weightKg.toStringAsFixed(1)} kg',
+                        style: theme.textTheme.titleMedium?.copyWith(
+                          fontWeight: FontWeight.w600,
+                        ),
+                      ),
+                      subtitle: Text(dateLabelBuilder(entry.date)),
+                      trailing: Row(
+                        mainAxisSize: MainAxisSize.min,
+                        children: [
+                          IconButton(
+                            tooltip: isBangla ? 'সম্পাদনা' : 'Edit',
+                            onPressed: isBusy ? null : () => onEdit(entry),
+                            icon: const Icon(Icons.edit_outlined),
+                          ),
+                          IconButton(
+                            tooltip: isBangla ? 'মুছুন' : 'Delete',
+                            onPressed: isBusy ? null : () => onDelete(entry),
+                            icon: const Icon(Icons.delete_outline),
+                          ),
+                        ],
+                      ),
+                    ),
+                    if (index != entries.length - 1)
+                      Divider(color: colorScheme.outlineVariant),
+                  ],
+                );
+              }),
           ],
         ),
       ),
