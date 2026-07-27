@@ -2,6 +2,7 @@ import 'package:flutter/material.dart';
 
 import 'daily_log_screen.dart';
 import 'habit_engine_screen.dart';
+import 'progress_screen.dart';
 import 'today_dashboard_screen.dart';
 
 class DashboardNavigationScreen extends StatefulWidget {
@@ -34,6 +35,7 @@ class DashboardNavigationScreen extends StatefulWidget {
 class _DashboardNavigationScreenState extends State<DashboardNavigationScreen> {
   int _selectedIndex = 0;
   late final ValueNotifier<int> _todayRefreshNotifier;
+  late final ValueNotifier<int> _progressRefreshNotifier;
   late final List<Widget> _pages;
 
   @override
@@ -42,6 +44,7 @@ class _DashboardNavigationScreenState extends State<DashboardNavigationScreen> {
 
     final isBangla = widget.isBangla;
     _todayRefreshNotifier = ValueNotifier<int>(0);
+    _progressRefreshNotifier = ValueNotifier<int>(0);
 
     _pages = <Widget>[
       TodayDashboardScreen(
@@ -63,13 +66,11 @@ class _DashboardNavigationScreenState extends State<DashboardNavigationScreen> {
         targetCaloriesMax: widget.targetCaloriesMax,
       ),
       HabitEngineScreen(isBangla: isBangla),
-      _DashboardPlaceholderScreen(
-        icon: Icons.bar_chart,
-        title: isBangla ? 'অগ্রগতি' : 'Progress',
-        description: isBangla
-            ? 'ওজন, calorie, activity এবং habit-এর পরিবর্তন chart-এর মাধ্যমে দেখা যাবে।'
-            : 'Changes in weight, calories, activity, and habits will appear in charts.',
+      ProgressScreen(
         isBangla: isBangla,
+        targetCaloriesMin: widget.targetCaloriesMin,
+        targetCaloriesMax: widget.targetCaloriesMax,
+        refreshListenable: _progressRefreshNotifier,
       ),
       _DashboardPlaceholderScreen(
         icon: Icons.menu_book_outlined,
@@ -94,6 +95,8 @@ class _DashboardNavigationScreenState extends State<DashboardNavigationScreen> {
     if (index == _selectedIndex) {
       if (index == 0) {
         _todayRefreshNotifier.value++;
+      } else if (index == 3) {
+        _progressRefreshNotifier.value++;
       }
       return;
     }
@@ -104,12 +107,15 @@ class _DashboardNavigationScreenState extends State<DashboardNavigationScreen> {
 
     if (index == 0) {
       _todayRefreshNotifier.value++;
+    } else if (index == 3) {
+      _progressRefreshNotifier.value++;
     }
   }
 
   @override
   void dispose() {
     _todayRefreshNotifier.dispose();
+    _progressRefreshNotifier.dispose();
     super.dispose();
   }
 
