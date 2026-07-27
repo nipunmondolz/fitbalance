@@ -1,6 +1,11 @@
+import 'dart:async';
+
+import 'package:flutter/foundation.dart';
 import 'package:flutter/material.dart';
 
-class TodayDashboardScreen extends StatelessWidget {
+import '../services/habit_storage_service.dart';
+
+class TodayDashboardScreen extends StatefulWidget {
   const TodayDashboardScreen({
     required this.isBangla,
     required this.goal,
@@ -10,6 +15,7 @@ class TodayDashboardScreen extends StatelessWidget {
     required this.activity,
     required this.sleep,
     required this.budget,
+    required this.refreshListenable,
     super.key,
   });
 
@@ -21,6 +27,125 @@ class TodayDashboardScreen extends StatelessWidget {
   final String activity;
   final String sleep;
   final String budget;
+  final ValueListenable<int> refreshListenable;
+
+  @override
+  State<TodayDashboardScreen> createState() => _TodayDashboardScreenState();
+}
+
+class _TodayDashboardScreenState extends State<TodayDashboardScreen>
+    with WidgetsBindingObserver {
+  List<bool> _completedHabits = [false, false, false];
+  StoredDailyCheckIn? _dailyCheckIn;
+  int _summaryLoadGeneration = 0;
+
+  bool get isBangla => widget.isBangla;
+  String get goal => widget.goal;
+  int get targetCaloriesMin => widget.targetCaloriesMin;
+  int get targetCaloriesMax => widget.targetCaloriesMax;
+  String get schedule => widget.schedule;
+  String get activity => widget.activity;
+  String get sleep => widget.sleep;
+  String get budget => widget.budget;
+
+  int get _completedHabitCount =>
+      _completedHabits.where((isCompleted) => isCompleted).length;
+
+  double get _habitProgress => _completedHabits.isEmpty
+      ? 0.0
+      : _completedHabitCount / _completedHabits.length;
+
+  bool get _hasDailyCheckIn => _dailyCheckIn != null;
+
+  @override
+  void initState() {
+    super.initState();
+    WidgetsBinding.instance.addObserver(this);
+    widget.refreshListenable.addListener(_handleRefreshRequest);
+    unawaited(_loadLiveSummary());
+  }
+
+  @override
+  void didUpdateWidget(covariant TodayDashboardScreen oldWidget) {
+    super.didUpdateWidget(oldWidget);
+
+    if (oldWidget.refreshListenable != widget.refreshListenable) {
+      oldWidget.refreshListenable.removeListener(_handleRefreshRequest);
+      widget.refreshListenable.addListener(_handleRefreshRequest);
+      unawaited(_loadLiveSummary());
+    }
+  }
+
+  @override
+  void didChangeAppLifecycleState(AppLifecycleState state) {
+    if (state == AppLifecycleState.resumed) {
+      unawaited(_loadLiveSummary());
+    }
+  }
+
+  void _handleRefreshRequest() {
+    unawaited(_loadLiveSummary());
+  }
+
+  Future<void> _loadLiveSummary() async {
+    final loadGeneration = ++_summaryLoadGeneration;
+
+    try {
+      final completionsFuture = HabitStorageService.instance
+          .loadTodayCompletions(_completedHabits.length);
+      final checkInFuture = HabitStorageService.instance.loadTodayCheckIn();
+
+      final savedCompletions = await completionsFuture;
+      final savedCheckIn = await checkInFuture;
+
+      if (!mounted || loadGeneration != _summaryLoadGeneration) {
+        return;
+      }
+
+      setState(() {
+        _completedHabits = savedCompletions;
+        _dailyCheckIn = savedCheckIn;
+      });
+    } catch (_) {
+      // Summary read ব্যর্থ হলে আগের visible state রাখা হবে।
+    }
+  }
+
+  String _storedMoodName(int moodIndex) {
+    switch (moodIndex) {
+      case 0:
+        return isBangla ? 'কঠিন দিন' : 'Difficult';
+      case 1:
+        return isBangla ? 'মোটামুটি' : 'Okay';
+      case 2:
+        return isBangla ? 'ভালো' : 'Good';
+      case 3:
+        return isBangla ? 'দারুণ' : 'Great';
+      default:
+        return isBangla ? 'অজানা' : 'Unknown';
+    }
+  }
+
+  String get _checkInSummary {
+    final checkIn = _dailyCheckIn;
+
+    if (checkIn == null) {
+      return isBangla
+          ? 'আজ এখনো Daily Check-in করা হয়নি।'
+          : 'No daily check-in has been saved yet.';
+    }
+
+    return isBangla
+        ? 'মুড: ${_storedMoodName(checkIn.moodIndex)} • শক্তি: ${checkIn.energyLevel}/৫'
+        : 'Mood: ${_storedMoodName(checkIn.moodIndex)} • Energy: ${checkIn.energyLevel}/5';
+  }
+
+  @override
+  void dispose() {
+    widget.refreshListenable.removeListener(_handleRefreshRequest);
+    WidgetsBinding.instance.removeObserver(this);
+    super.dispose();
+  }
 
   String get _goalKind {
     final value = goal.trim().toLowerCase();
@@ -311,6 +436,15 @@ class TodayDashboardScreen extends StatelessWidget {
                   ),
                 ),
               ),
+              const SizedBox(height: 16),
+              _TodayHabitSummaryCard(
+                isBangla: isBangla,
+                completedCount: _completedHabitCount,
+                totalCount: _completedHabits.length,
+                progress: _habitProgress,
+                hasCheckIn: _hasDailyCheckIn,
+                checkInSummary: _checkInSummary,
+              ),
               const SizedBox(height: 24),
               Text(
                 isBangla ? 'দ্রুত কাজ' : 'Quick actions',
@@ -416,6 +550,108 @@ class TodayDashboardScreen extends StatelessWidget {
               ),
             ],
           ),
+        ),
+      ),
+    );
+  }
+}
+
+class _TodayHabitSummaryCard extends StatelessWidget {
+  const _TodayHabitSummaryCard({
+    required this.isBangla,
+    required this.completedCount,
+    required this.totalCount,
+    required this.progress,
+    required this.hasCheckIn,
+    required this.checkInSummary,
+  });
+
+  final bool isBangla;
+  final int completedCount;
+  final int totalCount;
+  final double progress;
+  final bool hasCheckIn;
+  final String checkInSummary;
+
+  @override
+  Widget build(BuildContext context) {
+    final theme = Theme.of(context);
+    final colorScheme = theme.colorScheme;
+
+    return Card(
+      margin: EdgeInsets.zero,
+      elevation: 0,
+      color: colorScheme.surfaceContainerLowest,
+      shape: RoundedRectangleBorder(
+        borderRadius: BorderRadius.circular(18),
+        side: BorderSide(color: colorScheme.outlineVariant),
+      ),
+      child: Padding(
+        padding: const EdgeInsets.all(18),
+        child: Column(
+          crossAxisAlignment: CrossAxisAlignment.stretch,
+          children: [
+            Row(
+              children: [
+                Expanded(
+                  child: Text(
+                    isBangla ? 'আজকের অভ্যাস' : "Today's habits",
+                    style: theme.textTheme.titleMedium?.copyWith(
+                      fontWeight: FontWeight.w600,
+                    ),
+                  ),
+                ),
+                Text(
+                  isBangla
+                      ? '$completedCount / $totalCount সম্পন্ন'
+                      : '$completedCount / $totalCount completed',
+                  style: theme.textTheme.labelLarge?.copyWith(
+                    color: colorScheme.primary,
+                    fontWeight: FontWeight.bold,
+                  ),
+                ),
+              ],
+            ),
+            const SizedBox(height: 12),
+            LinearProgressIndicator(
+              value: progress,
+              minHeight: 9,
+              borderRadius: BorderRadius.circular(10),
+            ),
+            const SizedBox(height: 16),
+            Divider(color: colorScheme.outlineVariant),
+            const SizedBox(height: 10),
+            Row(
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
+                Icon(
+                  hasCheckIn ? Icons.fact_check : Icons.fact_check_outlined,
+                  color: colorScheme.primary,
+                ),
+                const SizedBox(width: 12),
+                Expanded(
+                  child: Column(
+                    crossAxisAlignment: CrossAxisAlignment.start,
+                    children: [
+                      Text(
+                        isBangla ? 'দৈনিক চেক-ইন' : 'Daily check-in',
+                        style: theme.textTheme.titleSmall?.copyWith(
+                          fontWeight: FontWeight.w600,
+                        ),
+                      ),
+                      const SizedBox(height: 4),
+                      Text(
+                        checkInSummary,
+                        style: theme.textTheme.bodyMedium?.copyWith(
+                          color: colorScheme.onSurfaceVariant,
+                        ),
+                      ),
+                    ],
+                  ),
+                ),
+              ],
+            ),
+          ],
         ),
       ),
     );

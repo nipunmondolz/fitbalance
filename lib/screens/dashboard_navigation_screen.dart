@@ -33,6 +33,7 @@ class DashboardNavigationScreen extends StatefulWidget {
 
 class _DashboardNavigationScreenState extends State<DashboardNavigationScreen> {
   int _selectedIndex = 0;
+  late final ValueNotifier<int> _todayRefreshNotifier;
   late final List<Widget> _pages;
 
   @override
@@ -40,6 +41,7 @@ class _DashboardNavigationScreenState extends State<DashboardNavigationScreen> {
     super.initState();
 
     final isBangla = widget.isBangla;
+    _todayRefreshNotifier = ValueNotifier<int>(0);
 
     _pages = <Widget>[
       TodayDashboardScreen(
@@ -51,15 +53,14 @@ class _DashboardNavigationScreenState extends State<DashboardNavigationScreen> {
         activity: widget.activity,
         sleep: widget.sleep,
         budget: widget.budget,
+        refreshListenable: _todayRefreshNotifier,
       ),
       DailyLogScreen(
         isBangla: isBangla,
         targetCaloriesMin: widget.targetCaloriesMin,
         targetCaloriesMax: widget.targetCaloriesMax,
       ),
-      HabitEngineScreen(
-  isBangla: isBangla,
-),
+      HabitEngineScreen(isBangla: isBangla),
       _DashboardPlaceholderScreen(
         icon: Icons.bar_chart,
         title: isBangla ? 'অগ্রগতি' : 'Progress',
@@ -89,12 +90,25 @@ class _DashboardNavigationScreenState extends State<DashboardNavigationScreen> {
 
   void _selectPage(int index) {
     if (index == _selectedIndex) {
+      if (index == 0) {
+        _todayRefreshNotifier.value++;
+      }
       return;
     }
 
     setState(() {
       _selectedIndex = index;
     });
+
+    if (index == 0) {
+      _todayRefreshNotifier.value++;
+    }
+  }
+
+  @override
+  void dispose() {
+    _todayRefreshNotifier.dispose();
+    super.dispose();
   }
 
   @override
@@ -111,6 +125,7 @@ class _DashboardNavigationScreenState extends State<DashboardNavigationScreen> {
         setState(() {
           _selectedIndex = 0;
         });
+        _todayRefreshNotifier.value++;
       },
       child: Scaffold(
         body: IndexedStack(index: _selectedIndex, children: _pages),
