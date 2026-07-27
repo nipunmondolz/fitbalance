@@ -1,4 +1,5 @@
 import 'dart:async';
+import 'dart:math' as math;
 
 import 'package:flutter/foundation.dart';
 import 'package:flutter/material.dart';
@@ -22,6 +23,20 @@ class ProgressScreen extends StatefulWidget {
 
   @override
   State<ProgressScreen> createState() => _ProgressScreenState();
+}
+
+enum _ProgressChartMetric { calories, water, exercise, sleep, habits }
+
+class _ChartBarData {
+  const _ChartBarData({
+    required this.label,
+    required this.value,
+    required this.valueText,
+  });
+
+  final String label;
+  final double value;
+  final String valueText;
 }
 
 class _ProgressDay {
@@ -58,6 +73,7 @@ class _ProgressScreenState extends State<ProgressScreen>
   List<bool> _habitCompletions = List<bool>.filled(_habitCount, false);
   StoredDailyCheckIn? _dailyCheckIn;
   List<_ProgressDay> _sevenDayProgress = const [];
+  _ProgressChartMetric _selectedChartMetric = _ProgressChartMetric.calories;
 
   bool _isLoading = true;
   int _loadGeneration = 0;
@@ -74,6 +90,57 @@ class _ProgressScreenState extends State<ProgressScreen>
       : (_dailyLogSummary.calories / widget.targetCaloriesMax)
             .clamp(0.0, 1.0)
             .toDouble();
+
+  List<_ProgressDay> get _loggedProgressDays => _sevenDayProgress
+      .where((progressDay) => progressDay.hasSavedData)
+      .toList(growable: false);
+
+  double _loggedDayAverage(double Function(_ProgressDay progressDay) valueOf) {
+    final loggedDays = _loggedProgressDays;
+
+    if (loggedDays.isEmpty) {
+      return 0;
+    }
+
+    final total = loggedDays.fold<double>(
+      0,
+      (sum, progressDay) => sum + valueOf(progressDay),
+    );
+
+    return total / loggedDays.length;
+  }
+
+  double get _averageCalories => _loggedDayAverage(
+    (progressDay) => progressDay.dailyLogSummary.calories.toDouble(),
+  );
+
+  double get _averageWater => _loggedDayAverage(
+    (progressDay) => progressDay.dailyLogSummary.waterGlasses.toDouble(),
+  );
+
+  double get _averageExercise => _loggedDayAverage(
+    (progressDay) => progressDay.dailyLogSummary.exerciseMinutes.toDouble(),
+  );
+
+  double get _averageSleep => _loggedDayAverage(
+    (progressDay) => progressDay.dailyLogSummary.sleepHours,
+  );
+
+  double get _habitConsistency {
+    final loggedDays = _loggedProgressDays;
+
+    if (loggedDays.isEmpty) {
+      return 0;
+    }
+
+    final completedHabits = loggedDays.fold<int>(
+      0,
+      (sum, progressDay) => sum + progressDay.completedHabitCount,
+    );
+    final availableHabits = loggedDays.length * _habitCount;
+
+    return availableHabits == 0 ? 0 : (completedHabits / availableHabits) * 100;
+  }
 
   @override
   void initState() {
@@ -235,6 +302,118 @@ class _ProgressScreenState extends State<ProgressScreen>
     final dateText = '${date.day} $month';
 
     return relativeLabel == null ? dateText : '$relativeLabel • $dateText';
+  }
+
+  String _chartMetricLabel(_ProgressChartMetric metric) {
+    switch (metric) {
+      case _ProgressChartMetric.calories:
+        return widget.isBangla ? 'ক্যালরি' : 'Calories';
+      case _ProgressChartMetric.water:
+        return widget.isBangla ? 'পানি' : 'Water';
+      case _ProgressChartMetric.exercise:
+        return widget.isBangla ? 'ব্যায়াম' : 'Exercise';
+      case _ProgressChartMetric.sleep:
+        return widget.isBangla ? 'ঘুম' : 'Sleep';
+      case _ProgressChartMetric.habits:
+        return widget.isBangla ? 'অভ্যাস' : 'Habits';
+    }
+  }
+
+  IconData _chartMetricIcon(_ProgressChartMetric metric) {
+    switch (metric) {
+      case _ProgressChartMetric.calories:
+        return Icons.local_fire_department;
+      case _ProgressChartMetric.water:
+        return Icons.water_drop;
+      case _ProgressChartMetric.exercise:
+        return Icons.directions_run;
+      case _ProgressChartMetric.sleep:
+        return Icons.bedtime;
+      case _ProgressChartMetric.habits:
+        return Icons.check_circle_outline;
+    }
+  }
+
+  double _chartMetricValue(
+    _ProgressDay progressDay,
+    _ProgressChartMetric metric,
+  ) {
+    switch (metric) {
+      case _ProgressChartMetric.calories:
+        return progressDay.dailyLogSummary.calories.toDouble();
+      case _ProgressChartMetric.water:
+        return progressDay.dailyLogSummary.waterGlasses.toDouble();
+      case _ProgressChartMetric.exercise:
+        return progressDay.dailyLogSummary.exerciseMinutes.toDouble();
+      case _ProgressChartMetric.sleep:
+        return progressDay.dailyLogSummary.sleepHours;
+      case _ProgressChartMetric.habits:
+        return progressDay.habitCompletions.isEmpty
+            ? 0
+            : (progressDay.completedHabitCount /
+                      progressDay.habitCompletions.length) *
+                  100;
+    }
+  }
+
+  String _chartValueText(
+    _ProgressDay progressDay,
+    _ProgressChartMetric metric,
+  ) {
+    final value = _chartMetricValue(progressDay, metric);
+
+    switch (metric) {
+      case _ProgressChartMetric.calories:
+      case _ProgressChartMetric.water:
+      case _ProgressChartMetric.exercise:
+        return value.round().toString();
+      case _ProgressChartMetric.sleep:
+        return value.toStringAsFixed(1);
+      case _ProgressChartMetric.habits:
+        return '${value.round()}%';
+    }
+  }
+
+  String _chartAverageText(_ProgressChartMetric metric) {
+    switch (metric) {
+      case _ProgressChartMetric.calories:
+        return '≈ ${_averageCalories.round()} kcal';
+      case _ProgressChartMetric.water:
+        return widget.isBangla
+            ? '${_averageWater.toStringAsFixed(1)} গ্লাস'
+            : '${_averageWater.toStringAsFixed(1)} glasses';
+      case _ProgressChartMetric.exercise:
+        return widget.isBangla
+            ? '${_averageExercise.round()} মিনিট'
+            : '${_averageExercise.round()} min';
+      case _ProgressChartMetric.sleep:
+        return widget.isBangla
+            ? '${_averageSleep.toStringAsFixed(1)} ঘণ্টা'
+            : '${_averageSleep.toStringAsFixed(1)} hours';
+      case _ProgressChartMetric.habits:
+        return '${_habitConsistency.round()}%';
+    }
+  }
+
+  String _shortDayLabel(DateTime date) {
+    const weekdaysBn = ['সোম', 'মঙ্গল', 'বুধ', 'বৃহঃ', 'শুক্র', 'শনি', 'রবি'];
+    const weekdaysEn = ['Mon', 'Tue', 'Wed', 'Thu', 'Fri', 'Sat', 'Sun'];
+
+    return widget.isBangla
+        ? weekdaysBn[date.weekday - 1]
+        : weekdaysEn[date.weekday - 1];
+  }
+
+  List<_ChartBarData> get _chartBars {
+    return _sevenDayProgress.reversed
+        .map((progressDay) {
+          return _ChartBarData(
+            label: _shortDayLabel(progressDay.date),
+            value: _chartMetricValue(progressDay, _selectedChartMetric),
+            valueText: _chartValueText(progressDay, _selectedChartMetric),
+          );
+        })
+        .toList(growable: false);
   }
 
   @override
@@ -424,7 +603,7 @@ class _ProgressScreenState extends State<ProgressScreen>
               ),
               const SizedBox(height: 24),
               Text(
-                widget.isBangla ? 'গত ৭ দিনের ইতিহাস' : 'Last 7 days',
+                widget.isBangla ? 'গত ৭ দিনের অগ্রগতি' : 'Last 7 days',
                 style: theme.textTheme.titleLarge?.copyWith(
                   fontWeight: FontWeight.bold,
                 ),
@@ -432,13 +611,46 @@ class _ProgressScreenState extends State<ProgressScreen>
               const SizedBox(height: 6),
               Text(
                 widget.isBangla
-                    ? 'ডিভাইসে সংরক্ষিত প্রতিদিনের তথ্য এখানে দেখা যাবে।'
-                    : 'Daily records saved on this device appear here.',
+                    ? 'সারাংশ, chart এবং প্রতিদিনের সংরক্ষিত তথ্য একসঙ্গে দেখুন।'
+                    : 'Review averages, charts, and saved daily records together.',
                 style: theme.textTheme.bodyMedium?.copyWith(
                   color: colorScheme.onSurfaceVariant,
                 ),
               ),
               const SizedBox(height: 12),
+              _SevenDayOverviewCard(
+                isBangla: widget.isBangla,
+                loggedDays: _loggedProgressDays.length,
+                averageCalories: _averageCalories,
+                averageWater: _averageWater,
+                averageExercise: _averageExercise,
+                averageSleep: _averageSleep,
+                habitConsistency: _habitConsistency,
+              ),
+              const SizedBox(height: 14),
+              _SevenDayChartCard(
+                isBangla: widget.isBangla,
+                selectedMetric: _selectedChartMetric,
+                metricLabel: _chartMetricLabel(_selectedChartMetric),
+                metricIcon: _chartMetricIcon(_selectedChartMetric),
+                averageText: _chartAverageText(_selectedChartMetric),
+                bars: _chartBars,
+                onMetricSelected: (metric) {
+                  setState(() {
+                    _selectedChartMetric = metric;
+                  });
+                },
+                metricLabelBuilder: _chartMetricLabel,
+                metricIconBuilder: _chartMetricIcon,
+              ),
+              const SizedBox(height: 20),
+              Text(
+                widget.isBangla ? 'প্রতিদিনের বিস্তারিত' : 'Daily details',
+                style: theme.textTheme.titleMedium?.copyWith(
+                  fontWeight: FontWeight.bold,
+                ),
+              ),
+              const SizedBox(height: 10),
               if (_sevenDayProgress.isEmpty && !_isLoading)
                 _EmptyHistoryCard(
                   message: widget.isBangla
@@ -476,8 +688,8 @@ class _ProgressScreenState extends State<ProgressScreen>
                     Expanded(
                       child: Text(
                         widget.isBangla
-                            ? '৭ দিনের history এখন প্রস্তুত। পরবর্তী ধাপে lightweight chart ও average summary যোগ হবে।'
-                            : 'Seven-day history is now ready. Lightweight charts and average summaries will be added next.',
+                            ? 'গড় হিসাব শুধু যেসব দিনে অন্তত একটি তথ্য সংরক্ষিত হয়েছে, সেই দিনগুলোর উপর ভিত্তি করে।'
+                            : 'Averages are based only on days that contain at least one saved record.',
                         style: theme.textTheme.bodyMedium?.copyWith(
                           color: colorScheme.onSecondaryContainer,
                         ),
@@ -489,6 +701,345 @@ class _ProgressScreenState extends State<ProgressScreen>
             ],
           ),
         ),
+      ),
+    );
+  }
+}
+
+class _SevenDayOverviewCard extends StatelessWidget {
+  const _SevenDayOverviewCard({
+    required this.isBangla,
+    required this.loggedDays,
+    required this.averageCalories,
+    required this.averageWater,
+    required this.averageExercise,
+    required this.averageSleep,
+    required this.habitConsistency,
+  });
+
+  final bool isBangla;
+  final int loggedDays;
+  final double averageCalories;
+  final double averageWater;
+  final double averageExercise;
+  final double averageSleep;
+  final double habitConsistency;
+
+  @override
+  Widget build(BuildContext context) {
+    final theme = Theme.of(context);
+    final colorScheme = theme.colorScheme;
+
+    return Card(
+      margin: EdgeInsets.zero,
+      elevation: 0,
+      color: colorScheme.surfaceContainerLowest,
+      shape: RoundedRectangleBorder(
+        borderRadius: BorderRadius.circular(18),
+        side: BorderSide(color: colorScheme.outlineVariant),
+      ),
+      child: Padding(
+        padding: const EdgeInsets.all(18),
+        child: Column(
+          crossAxisAlignment: CrossAxisAlignment.stretch,
+          children: [
+            Text(
+              isBangla ? '৭ দিনের সারাংশ' : 'Seven-day overview',
+              style: theme.textTheme.titleMedium?.copyWith(
+                fontWeight: FontWeight.w600,
+              ),
+            ),
+            const SizedBox(height: 4),
+            Text(
+              isBangla ? 'লগ করা দিনের গড়' : 'Averages for logged days',
+              style: theme.textTheme.bodySmall?.copyWith(
+                color: colorScheme.onSurfaceVariant,
+              ),
+            ),
+            const SizedBox(height: 16),
+            GridView.count(
+              crossAxisCount: 2,
+              shrinkWrap: true,
+              physics: const NeverScrollableScrollPhysics(),
+              mainAxisSpacing: 16,
+              crossAxisSpacing: 12,
+              childAspectRatio: 2.05,
+              children: [
+                _OverviewMetric(
+                  icon: Icons.calendar_month_outlined,
+                  value: '$loggedDays/7',
+                  label: isBangla ? 'দিন লগ করা' : 'days logged',
+                ),
+                _OverviewMetric(
+                  icon: Icons.local_fire_department,
+                  value: '≈ ${averageCalories.round()}',
+                  label: 'kcal',
+                ),
+                _OverviewMetric(
+                  icon: Icons.water_drop,
+                  value: averageWater.toStringAsFixed(1),
+                  label: isBangla ? 'গ্লাস পানি' : 'glasses water',
+                ),
+                _OverviewMetric(
+                  icon: Icons.directions_run,
+                  value: '${averageExercise.round()}',
+                  label: isBangla ? 'মিনিট ব্যায়াম' : 'exercise minutes',
+                ),
+                _OverviewMetric(
+                  icon: Icons.bedtime,
+                  value: averageSleep.toStringAsFixed(1),
+                  label: isBangla ? 'ঘণ্টা ঘুম' : 'sleep hours',
+                ),
+                _OverviewMetric(
+                  icon: Icons.check_circle_outline,
+                  value: '${habitConsistency.round()}%',
+                  label: isBangla
+                      ? 'অভ্যাসের ধারাবাহিকতা'
+                      : 'habit consistency',
+                ),
+              ],
+            ),
+          ],
+        ),
+      ),
+    );
+  }
+}
+
+class _OverviewMetric extends StatelessWidget {
+  const _OverviewMetric({
+    required this.icon,
+    required this.value,
+    required this.label,
+  });
+
+  final IconData icon;
+  final String value;
+  final String label;
+
+  @override
+  Widget build(BuildContext context) {
+    final theme = Theme.of(context);
+
+    return Row(
+      children: [
+        Icon(icon, color: theme.colorScheme.primary),
+        const SizedBox(width: 10),
+        Expanded(
+          child: Column(
+            mainAxisAlignment: MainAxisAlignment.center,
+            crossAxisAlignment: CrossAxisAlignment.start,
+            children: [
+              Text(
+                value,
+                maxLines: 1,
+                overflow: TextOverflow.ellipsis,
+                style: theme.textTheme.titleSmall?.copyWith(
+                  fontWeight: FontWeight.bold,
+                ),
+              ),
+              Text(
+                label,
+                maxLines: 2,
+                overflow: TextOverflow.ellipsis,
+                style: theme.textTheme.bodySmall,
+              ),
+            ],
+          ),
+        ),
+      ],
+    );
+  }
+}
+
+class _SevenDayChartCard extends StatelessWidget {
+  const _SevenDayChartCard({
+    required this.isBangla,
+    required this.selectedMetric,
+    required this.metricLabel,
+    required this.metricIcon,
+    required this.averageText,
+    required this.bars,
+    required this.onMetricSelected,
+    required this.metricLabelBuilder,
+    required this.metricIconBuilder,
+  });
+
+  final bool isBangla;
+  final _ProgressChartMetric selectedMetric;
+  final String metricLabel;
+  final IconData metricIcon;
+  final String averageText;
+  final List<_ChartBarData> bars;
+  final ValueChanged<_ProgressChartMetric> onMetricSelected;
+  final String Function(_ProgressChartMetric metric) metricLabelBuilder;
+  final IconData Function(_ProgressChartMetric metric) metricIconBuilder;
+
+  @override
+  Widget build(BuildContext context) {
+    final theme = Theme.of(context);
+    final colorScheme = theme.colorScheme;
+
+    return Card(
+      margin: EdgeInsets.zero,
+      elevation: 0,
+      color: colorScheme.surfaceContainerLowest,
+      shape: RoundedRectangleBorder(
+        borderRadius: BorderRadius.circular(18),
+        side: BorderSide(color: colorScheme.outlineVariant),
+      ),
+      child: Padding(
+        padding: const EdgeInsets.all(18),
+        child: Column(
+          crossAxisAlignment: CrossAxisAlignment.stretch,
+          children: [
+            Text(
+              isBangla ? '৭ দিনের chart' : 'Seven-day chart',
+              style: theme.textTheme.titleMedium?.copyWith(
+                fontWeight: FontWeight.w600,
+              ),
+            ),
+            const SizedBox(height: 12),
+            SingleChildScrollView(
+              scrollDirection: Axis.horizontal,
+              child: Row(
+                children: _ProgressChartMetric.values
+                    .map((metric) {
+                      return Padding(
+                        padding: const EdgeInsets.only(right: 8),
+                        child: ChoiceChip(
+                          avatar: Icon(metricIconBuilder(metric), size: 18),
+                          label: Text(metricLabelBuilder(metric)),
+                          selected: selectedMetric == metric,
+                          onSelected: (_) => onMetricSelected(metric),
+                        ),
+                      );
+                    })
+                    .toList(growable: false),
+              ),
+            ),
+            const SizedBox(height: 18),
+            Row(
+              children: [
+                Icon(metricIcon, color: colorScheme.primary),
+                const SizedBox(width: 10),
+                Expanded(
+                  child: Text(
+                    metricLabel,
+                    style: theme.textTheme.titleSmall?.copyWith(
+                      fontWeight: FontWeight.w600,
+                    ),
+                  ),
+                ),
+                Text(
+                  averageText,
+                  style: theme.textTheme.labelLarge?.copyWith(
+                    color: colorScheme.primary,
+                    fontWeight: FontWeight.bold,
+                  ),
+                ),
+              ],
+            ),
+            const SizedBox(height: 6),
+            Text(
+              isBangla
+                  ? 'বাম দিকের bar সবচেয়ে পুরোনো দিন, ডান দিকের bar আজ।'
+                  : 'The oldest day is on the left and today is on the right.',
+              style: theme.textTheme.bodySmall?.copyWith(
+                color: colorScheme.onSurfaceVariant,
+              ),
+            ),
+            const SizedBox(height: 18),
+            _SevenDayBarChart(bars: bars),
+          ],
+        ),
+      ),
+    );
+  }
+}
+
+class _SevenDayBarChart extends StatelessWidget {
+  const _SevenDayBarChart({required this.bars});
+
+  final List<_ChartBarData> bars;
+
+  @override
+  Widget build(BuildContext context) {
+    final theme = Theme.of(context);
+    final colorScheme = theme.colorScheme;
+
+    var maximumValue = 0.0;
+    for (final bar in bars) {
+      maximumValue = math.max(maximumValue, bar.value);
+    }
+
+    return SizedBox(
+      height: 180,
+      child: Row(
+        crossAxisAlignment: CrossAxisAlignment.end,
+        children: bars
+            .map((bar) {
+              final heightFactor = maximumValue <= 0
+                  ? 0.0
+                  : (bar.value / maximumValue).clamp(0.0, 1.0).toDouble();
+              final barHeight = bar.value <= 0
+                  ? 6.0
+                  : math.max(12.0, heightFactor * 108).toDouble();
+
+              return Expanded(
+                child: Padding(
+                  padding: const EdgeInsets.symmetric(horizontal: 3),
+                  child: Column(
+                    mainAxisAlignment: MainAxisAlignment.end,
+                    children: [
+                      SizedBox(
+                        height: 22,
+                        child: FittedBox(
+                          fit: BoxFit.scaleDown,
+                          child: Text(
+                            bar.valueText,
+                            style: theme.textTheme.labelSmall?.copyWith(
+                              fontWeight: FontWeight.w600,
+                            ),
+                          ),
+                        ),
+                      ),
+                      const SizedBox(height: 5),
+                      SizedBox(
+                        height: 108,
+                        child: Align(
+                          alignment: Alignment.bottomCenter,
+                          child: AnimatedContainer(
+                            duration: const Duration(milliseconds: 220),
+                            curve: Curves.easeOut,
+                            width: 22,
+                            height: barHeight,
+                            decoration: BoxDecoration(
+                              color: bar.value <= 0
+                                  ? colorScheme.surfaceContainerHighest
+                                  : colorScheme.primary,
+                              borderRadius: const BorderRadius.vertical(
+                                top: Radius.circular(7),
+                              ),
+                            ),
+                          ),
+                        ),
+                      ),
+                      const SizedBox(height: 8),
+                      Text(
+                        bar.label,
+                        maxLines: 1,
+                        overflow: TextOverflow.ellipsis,
+                        style: theme.textTheme.labelSmall?.copyWith(
+                          color: colorScheme.onSurfaceVariant,
+                        ),
+                      ),
+                    ],
+                  ),
+                ),
+              );
+            })
+            .toList(growable: false),
       ),
     );
   }
