@@ -28,6 +28,8 @@ class ProgressScreen extends StatefulWidget {
 
 enum _ProgressChartMetric { calories, water, exercise, sleep, habits }
 
+enum _WeightGoalDirection { loss, gain, maintain }
+
 class _ChartBarData {
   const _ChartBarData({
     required this.label,
@@ -89,10 +91,12 @@ class _ProgressScreenState extends State<ProgressScreen>
   StoredDailyCheckIn? _dailyCheckIn;
   List<_ProgressDay> _sevenDayProgress = const [];
   List<StoredWeightEntry> _weightEntries = const [];
+  double? _targetWeightKg;
   _ProgressChartMetric _selectedChartMetric = _ProgressChartMetric.calories;
 
   bool _isLoading = true;
   bool _isSavingWeight = false;
+  bool _isSavingTargetWeight = false;
   int _loadGeneration = 0;
 
   int get _completedHabitCount =>
@@ -135,6 +139,95 @@ class _ProgressScreenState extends State<ProgressScreen>
     }
 
     return latestWeight.weightKg - startingWeight.weightKg;
+  }
+
+  _WeightGoalDirection? get _weightGoalDirection {
+    final startingWeight = _startingWeight;
+    final targetWeightKg = _targetWeightKg;
+
+    if (startingWeight == null || targetWeightKg == null) {
+      return null;
+    }
+
+    final difference = targetWeightKg - startingWeight.weightKg;
+
+    if (difference.abs() < 0.05) {
+      return _WeightGoalDirection.maintain;
+    }
+
+    return difference < 0
+        ? _WeightGoalDirection.loss
+        : _WeightGoalDirection.gain;
+  }
+
+  double get _weightGoalProgress {
+    final startingWeight = _startingWeight;
+    final latestWeight = _latestWeight;
+    final targetWeightKg = _targetWeightKg;
+    final direction = _weightGoalDirection;
+
+    if (startingWeight == null ||
+        latestWeight == null ||
+        targetWeightKg == null ||
+        direction == null) {
+      return 0;
+    }
+
+    switch (direction) {
+      case _WeightGoalDirection.loss:
+        final totalDistance = startingWeight.weightKg - targetWeightKg;
+        final completedDistance =
+            startingWeight.weightKg - latestWeight.weightKg;
+
+        if (totalDistance <= 0) {
+          return 0;
+        }
+
+        return (completedDistance / totalDistance).clamp(0.0, 1.0).toDouble();
+      case _WeightGoalDirection.gain:
+        final totalDistance = targetWeightKg - startingWeight.weightKg;
+        final completedDistance =
+            latestWeight.weightKg - startingWeight.weightKg;
+
+        if (totalDistance <= 0) {
+          return 0;
+        }
+
+        return (completedDistance / totalDistance).clamp(0.0, 1.0).toDouble();
+      case _WeightGoalDirection.maintain:
+        return (latestWeight.weightKg - targetWeightKg).abs() <= 0.5 ? 1 : 0;
+    }
+  }
+
+  double? get _remainingToTargetKg {
+    final latestWeight = _latestWeight;
+    final targetWeightKg = _targetWeightKg;
+    final direction = _weightGoalDirection;
+
+    if (latestWeight == null || targetWeightKg == null || direction == null) {
+      return null;
+    }
+
+    switch (direction) {
+      case _WeightGoalDirection.loss:
+        return math.max(latestWeight.weightKg - targetWeightKg, 0).toDouble();
+      case _WeightGoalDirection.gain:
+        return math.max(targetWeightKg - latestWeight.weightKg, 0).toDouble();
+      case _WeightGoalDirection.maintain:
+        return (latestWeight.weightKg - targetWeightKg).abs();
+    }
+  }
+
+  bool get _hasReachedWeightTarget {
+    final remaining = _remainingToTargetKg;
+
+    if (remaining == null) {
+      return false;
+    }
+
+    return _weightGoalDirection == _WeightGoalDirection.maintain
+        ? remaining <= 0.5
+        : remaining <= 0.05;
   }
 
   List<_WeightTrendPoint> get _weightTrendPoints {
@@ -269,9 +362,12 @@ class _ProgressScreenState extends State<ProgressScreen>
     try {
       final sevenDayProgressFuture = Future.wait(dates.map(_loadProgressDay));
       final weightEntriesFuture = WeightStorageService.instance.loadEntries();
+      final targetWeightFuture = WeightStorageService.instance
+          .loadTargetWeight();
 
       final sevenDayProgress = await sevenDayProgressFuture;
       final weightEntries = await weightEntriesFuture;
+      final targetWeightKg = await targetWeightFuture;
 
       if (!mounted || loadGeneration != _loadGeneration) {
         return;
@@ -285,6 +381,7 @@ class _ProgressScreenState extends State<ProgressScreen>
         _dailyCheckIn = todayProgress.dailyCheckIn;
         _sevenDayProgress = sevenDayProgress;
         _weightEntries = weightEntries;
+        _targetWeightKg = targetWeightKg;
         _isLoading = false;
       });
     } catch (_) {
@@ -517,6 +614,74 @@ class _ProgressScreenState extends State<ProgressScreen>
       if (mounted) {
         setState(() {
           _isSavingWeight = false;
+        });
+      }
+    }
+  }
+
+  Future<void> _showTargetWeightSheet() async {
+    final targetWeightKg = await showModalBottomSheet<double>(
+      context: context,
+      isScrollControlled: true,
+      showDragHandle: true,
+      builder: (sheetContext) {
+        return _TargetWeightEntrySheet(
+          isBangla: widget.isBangla,
+          initialTargetWeight: _targetWeightKg,
+        );
+      },
+    );
+
+    if (targetWeightKg == null || !mounted) {
+      return;
+    }
+
+    setState(() {
+      _isSavingTargetWeight = true;
+    });
+
+    try {
+      await WeightStorageService.instance.saveTargetWeight(targetWeightKg);
+
+      if (!mounted) {
+        return;
+      }
+
+      setState(() {
+        _targetWeightKg = targetWeightKg;
+      });
+
+      ScaffoldMessenger.of(context)
+        ..hideCurrentSnackBar()
+        ..showSnackBar(
+          SnackBar(
+            content: Text(
+              widget.isBangla
+                  ? 'লক্ষ্য ওজন সংরক্ষণ হয়েছে।'
+                  : 'The target weight has been saved.',
+            ),
+          ),
+        );
+    } catch (_) {
+      if (!mounted) {
+        return;
+      }
+
+      ScaffoldMessenger.of(context)
+        ..hideCurrentSnackBar()
+        ..showSnackBar(
+          SnackBar(
+            content: Text(
+              widget.isBangla
+                  ? 'লক্ষ্য ওজন সংরক্ষণ করা যায়নি। আবার চেষ্টা করুন।'
+                  : 'The target weight could not be saved. Please try again.',
+            ),
+          ),
+        );
+    } finally {
+      if (mounted) {
+        setState(() {
+          _isSavingTargetWeight = false;
         });
       }
     }
@@ -764,6 +929,19 @@ class _ProgressScreenState extends State<ProgressScreen>
                 onLogTodayWeight: _showTodayWeightEntrySheet,
                 onAddPastWeight: _showPastWeightEntrySheet,
                 signedChangeBuilder: _signedWeightChange,
+              ),
+              const SizedBox(height: 14),
+              _WeightGoalCard(
+                isBangla: widget.isBangla,
+                targetWeightKg: _targetWeightKg,
+                startingWeightKg: _startingWeight?.weightKg,
+                latestWeightKg: _latestWeight?.weightKg,
+                direction: _weightGoalDirection,
+                progress: _weightGoalProgress,
+                remainingKg: _remainingToTargetKg,
+                isReached: _hasReachedWeightTarget,
+                isSaving: _isSavingTargetWeight,
+                onSetTarget: _showTargetWeightSheet,
               ),
               const SizedBox(height: 14),
               _WeightTrendCard(
@@ -1021,6 +1199,130 @@ class _ProgressScreenState extends State<ProgressScreen>
               ),
             ],
           ),
+        ),
+      ),
+    );
+  }
+}
+
+class _TargetWeightEntrySheet extends StatefulWidget {
+  const _TargetWeightEntrySheet({
+    required this.isBangla,
+    required this.initialTargetWeight,
+  });
+
+  final bool isBangla;
+  final double? initialTargetWeight;
+
+  @override
+  State<_TargetWeightEntrySheet> createState() =>
+      _TargetWeightEntrySheetState();
+}
+
+class _TargetWeightEntrySheetState extends State<_TargetWeightEntrySheet> {
+  late final TextEditingController _controller;
+  String? _errorText;
+
+  @override
+  void initState() {
+    super.initState();
+    _controller = TextEditingController(
+      text: widget.initialTargetWeight?.toStringAsFixed(1) ?? '',
+    );
+  }
+
+  void _submit() {
+    final parsed = double.tryParse(
+      _controller.text.trim().replaceAll(',', '.'),
+    );
+
+    if (parsed == null || parsed < 20 || parsed > 400) {
+      setState(() {
+        _errorText = widget.isBangla
+            ? '২০ থেকে ৪০০ কেজির মধ্যে সঠিক লক্ষ্য ওজন লিখুন।'
+            : 'Enter a valid target weight between 20 and 400 kg.';
+      });
+      return;
+    }
+
+    Navigator.of(context).pop(parsed);
+  }
+
+  @override
+  void dispose() {
+    _controller.dispose();
+    super.dispose();
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    return SafeArea(
+      child: SingleChildScrollView(
+        padding: EdgeInsets.fromLTRB(
+          16,
+          0,
+          16,
+          MediaQuery.viewInsetsOf(context).bottom + 20,
+        ),
+        child: Column(
+          mainAxisSize: MainAxisSize.min,
+          crossAxisAlignment: CrossAxisAlignment.stretch,
+          children: [
+            Text(
+              widget.initialTargetWeight == null
+                  ? (widget.isBangla
+                        ? 'লক্ষ্য ওজন ঠিক করুন'
+                        : 'Set target weight')
+                  : (widget.isBangla
+                        ? 'লক্ষ্য ওজন আপডেট করুন'
+                        : 'Update target weight'),
+              style: Theme.of(
+                context,
+              ).textTheme.titleLarge?.copyWith(fontWeight: FontWeight.bold),
+            ),
+            const SizedBox(height: 6),
+            Text(
+              widget.isBangla
+                  ? 'শুরুর ওজন ও সর্বশেষ ওজন থেকে goal progress হিসাব হবে।'
+                  : 'Goal progress is calculated from your starting and latest weights.',
+            ),
+            const SizedBox(height: 18),
+            TextField(
+              controller: _controller,
+              autofocus: true,
+              keyboardType: const TextInputType.numberWithOptions(
+                decimal: true,
+              ),
+              textInputAction: TextInputAction.done,
+              decoration: InputDecoration(
+                labelText: widget.isBangla
+                    ? 'লক্ষ্য ওজন (কেজি)'
+                    : 'Target weight (kg)',
+                hintText: '65.0',
+                suffixText: 'kg',
+                errorText: _errorText,
+                border: const OutlineInputBorder(),
+              ),
+              onChanged: (_) {
+                if (_errorText != null) {
+                  setState(() {
+                    _errorText = null;
+                  });
+                }
+              },
+              onSubmitted: (_) => _submit(),
+            ),
+            const SizedBox(height: 18),
+            FilledButton.icon(
+              onPressed: _submit,
+              icon: const Icon(Icons.flag_outlined),
+              label: Text(
+                widget.isBangla
+                    ? 'লক্ষ্য ওজন সংরক্ষণ করুন'
+                    : 'Save target weight',
+              ),
+            ),
+          ],
         ),
       ),
     );
@@ -1346,6 +1648,201 @@ class _WeightTrackingCard extends StatelessWidget {
                 isBangla
                     ? 'আগের তারিখের ওজন যোগ করুন'
                     : 'Add weight for a past date',
+              ),
+            ),
+          ],
+        ),
+      ),
+    );
+  }
+}
+
+class _WeightGoalCard extends StatelessWidget {
+  const _WeightGoalCard({
+    required this.isBangla,
+    required this.targetWeightKg,
+    required this.startingWeightKg,
+    required this.latestWeightKg,
+    required this.direction,
+    required this.progress,
+    required this.remainingKg,
+    required this.isReached,
+    required this.isSaving,
+    required this.onSetTarget,
+  });
+
+  final bool isBangla;
+  final double? targetWeightKg;
+  final double? startingWeightKg;
+  final double? latestWeightKg;
+  final _WeightGoalDirection? direction;
+  final double progress;
+  final double? remainingKg;
+  final bool isReached;
+  final bool isSaving;
+  final VoidCallback onSetTarget;
+
+  String _directionLabel() {
+    switch (direction) {
+      case _WeightGoalDirection.loss:
+        return isBangla ? 'ওজন কমানোর লক্ষ্য' : 'Weight-loss goal';
+      case _WeightGoalDirection.gain:
+        return isBangla ? 'ওজন বাড়ানোর লক্ষ্য' : 'Weight-gain goal';
+      case _WeightGoalDirection.maintain:
+        return isBangla ? 'ওজন বজায় রাখার লক্ষ্য' : 'Weight-maintenance goal';
+      case null:
+        return isBangla ? 'লক্ষ্য ওজন' : 'Target weight';
+    }
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    final theme = Theme.of(context);
+    final colorScheme = theme.colorScheme;
+    final hasTarget = targetWeightKg != null;
+    final canCalculateProgress =
+        hasTarget && startingWeightKg != null && latestWeightKg != null;
+
+    return Card(
+      margin: EdgeInsets.zero,
+      elevation: 0,
+      color: colorScheme.surfaceContainerLowest,
+      shape: RoundedRectangleBorder(
+        borderRadius: BorderRadius.circular(18),
+        side: BorderSide(color: colorScheme.outlineVariant),
+      ),
+      child: Padding(
+        padding: const EdgeInsets.all(18),
+        child: Column(
+          crossAxisAlignment: CrossAxisAlignment.stretch,
+          children: [
+            Row(
+              children: [
+                Container(
+                  width: 46,
+                  height: 46,
+                  decoration: BoxDecoration(
+                    color: colorScheme.primaryContainer,
+                    borderRadius: BorderRadius.circular(13),
+                  ),
+                  child: Icon(
+                    Icons.flag_outlined,
+                    color: colorScheme.onPrimaryContainer,
+                  ),
+                ),
+                const SizedBox(width: 12),
+                Expanded(
+                  child: Text(
+                    isBangla
+                        ? 'লক্ষ্য ওজন ও অগ্রগতি'
+                        : 'Target weight and progress',
+                    style: theme.textTheme.titleMedium?.copyWith(
+                      fontWeight: FontWeight.w600,
+                    ),
+                  ),
+                ),
+              ],
+            ),
+            const SizedBox(height: 16),
+            if (!hasTarget)
+              Text(
+                isBangla
+                    ? 'লক্ষ্য ওজন ঠিক করলে কত কেজি বাকি এবং কত শতাংশ অগ্রগতি হয়েছে তা দেখা যাবে।'
+                    : 'Set a target weight to see how much remains and your completion percentage.',
+                style: theme.textTheme.bodyMedium?.copyWith(
+                  color: colorScheme.onSurfaceVariant,
+                ),
+              )
+            else ...[
+              Text(
+                '${targetWeightKg!.toStringAsFixed(1)} kg',
+                style: theme.textTheme.headlineMedium?.copyWith(
+                  color: colorScheme.primary,
+                  fontWeight: FontWeight.bold,
+                ),
+              ),
+              const SizedBox(height: 3),
+              Text(
+                _directionLabel(),
+                style: theme.textTheme.bodySmall?.copyWith(
+                  color: colorScheme.onSurfaceVariant,
+                ),
+              ),
+              const SizedBox(height: 16),
+              if (!canCalculateProgress)
+                Text(
+                  isBangla
+                      ? 'Goal progress হিসাব করতে অন্তত একটি ওজনের entry যোগ করুন।'
+                      : 'Add at least one weight entry to calculate goal progress.',
+                  style: theme.textTheme.bodyMedium?.copyWith(
+                    color: colorScheme.onSurfaceVariant,
+                  ),
+                )
+              else ...[
+                Row(
+                  children: [
+                    Expanded(
+                      child: _WeightSummaryValue(
+                        label: isBangla ? 'সর্বশেষ ওজন' : 'Latest weight',
+                        value: '${latestWeightKg!.toStringAsFixed(1)} kg',
+                      ),
+                    ),
+                    const SizedBox(width: 12),
+                    Expanded(
+                      child: _WeightSummaryValue(
+                        label: isBangla ? 'বাকি' : 'Remaining',
+                        value: isReached
+                            ? '0.0 kg'
+                            : '${remainingKg!.toStringAsFixed(1)} kg',
+                      ),
+                    ),
+                  ],
+                ),
+                const SizedBox(height: 16),
+                Row(
+                  children: [
+                    Expanded(
+                      child: Text(
+                        isReached
+                            ? (isBangla ? 'লক্ষ্য অর্জিত' : 'Target reached')
+                            : 'Goal progress',
+                        style: theme.textTheme.titleSmall?.copyWith(
+                          fontWeight: FontWeight.w600,
+                        ),
+                      ),
+                    ),
+                    Text(
+                      '${(progress * 100).round()}%',
+                      style: theme.textTheme.labelLarge?.copyWith(
+                        color: colorScheme.primary,
+                        fontWeight: FontWeight.bold,
+                      ),
+                    ),
+                  ],
+                ),
+                const SizedBox(height: 10),
+                LinearProgressIndicator(
+                  value: progress,
+                  minHeight: 10,
+                  borderRadius: BorderRadius.circular(10),
+                ),
+              ],
+            ],
+            const SizedBox(height: 18),
+            FilledButton.icon(
+              onPressed: isSaving ? null : onSetTarget,
+              icon: isSaving
+                  ? const SizedBox.square(
+                      dimension: 18,
+                      child: CircularProgressIndicator(strokeWidth: 2),
+                    )
+                  : const Icon(Icons.flag_outlined),
+              label: Text(
+                hasTarget
+                    ? (isBangla
+                          ? 'লক্ষ্য ওজন আপডেট করুন'
+                          : 'Update target weight')
+                    : (isBangla ? 'লক্ষ্য ওজন ঠিক করুন' : 'Set target weight'),
               ),
             ),
           ],

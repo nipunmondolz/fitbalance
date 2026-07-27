@@ -54,8 +54,32 @@ class WeightStorageService {
   static final WeightStorageService instance = WeightStorageService._();
 
   static const String _weightEntriesKey = 'weight_entries_v1';
+  static const String _targetWeightKey = 'target_weight_v1';
 
   final SharedPreferencesAsync _preferences = SharedPreferencesAsync();
+
+  Future<double?> loadTargetWeight() async {
+    final savedTarget = await _preferences.getDouble(_targetWeightKey);
+
+    if (savedTarget == null ||
+        !savedTarget.isFinite ||
+        savedTarget < 20 ||
+        savedTarget > 400) {
+      return null;
+    }
+
+    return savedTarget;
+  }
+
+  Future<void> saveTargetWeight(double targetWeightKg) {
+    if (!targetWeightKg.isFinite ||
+        targetWeightKg < 20 ||
+        targetWeightKg > 400) {
+      throw const FormatException('Invalid target weight value');
+    }
+
+    return _preferences.setDouble(_targetWeightKey, targetWeightKg);
+  }
 
   Future<List<StoredWeightEntry>> loadEntries() async {
     final savedJson = await _preferences.getString(_weightEntriesKey);
