@@ -1,3 +1,5 @@
+import 'dart:async';
+
 import 'package:flutter/material.dart';
 
 import '../services/daily_log_storage_service.dart';
@@ -380,13 +382,78 @@ class DailyLogScreen extends StatefulWidget {
   State<DailyLogScreen> createState() => _DailyLogScreenState();
 }
 
-class _DailyLogScreenState extends State<DailyLogScreen> {
+class _DailyLogScreenState extends State<DailyLogScreen>
+    with WidgetsBindingObserver {
   List<_DailyLogEntry> _entries = [];
+
+  Timer? _midnightRefreshTimer;
+  late int _loadedDateToken;
+  bool _isRefreshingForNewDay = false;
 
   @override
   void initState() {
     super.initState();
-    _loadTodayEntries();
+    WidgetsBinding.instance.addObserver(this);
+    _loadedDateToken = _currentDateToken;
+    unawaited(_loadTodayEntries());
+    _scheduleMidnightRefresh();
+  }
+
+  int get _currentDateToken {
+    final now = DateTime.now();
+    return (now.year * 10000) + (now.month * 100) + now.day;
+  }
+
+  @override
+  void didChangeAppLifecycleState(AppLifecycleState state) {
+    if (state == AppLifecycleState.resumed) {
+      unawaited(_refreshForNewDay());
+      _scheduleMidnightRefresh();
+    }
+  }
+
+  void _scheduleMidnightRefresh() {
+    _midnightRefreshTimer?.cancel();
+
+    final now = DateTime.now();
+    final nextMidnight = DateTime(now.year, now.month, now.day + 1);
+
+    final delay = nextMidnight.difference(now) + const Duration(seconds: 1);
+
+    _midnightRefreshTimer = Timer(delay, () {
+      unawaited(_refreshForNewDay());
+      _scheduleMidnightRefresh();
+    });
+  }
+
+  Future<void> _refreshForNewDay() async {
+    final currentDateToken = _currentDateToken;
+
+    if (!mounted ||
+        currentDateToken == _loadedDateToken ||
+        _isRefreshingForNewDay) {
+      return;
+    }
+
+    _isRefreshingForNewDay = true;
+    _loadedDateToken = currentDateToken;
+
+    setState(() {
+      _entries = [];
+    });
+
+    try {
+      await _loadTodayEntries();
+    } finally {
+      _isRefreshingForNewDay = false;
+    }
+  }
+
+  @override
+  void dispose() {
+    WidgetsBinding.instance.removeObserver(this);
+    _midnightRefreshTimer?.cancel();
+    super.dispose();
   }
 
   Future<void> _loadTodayEntries() async {
