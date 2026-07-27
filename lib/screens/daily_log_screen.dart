@@ -536,6 +536,92 @@ class _DailyLogScreenState extends State<DailyLogScreen>
       .where((entry) => entry.type == _LogType.sleep)
       .fold(0, (total, entry) => total + entry.amount);
 
+  String _localizedEntryTitle(_DailyLogEntry entry) {
+    switch (entry.type) {
+      case _LogType.water:
+        return widget.isBangla ? 'পানি' : 'Water';
+      case _LogType.softDrink:
+        return widget.isBangla ? 'কোমল পানীয়' : 'Soft drink';
+      case _LogType.sleep:
+        return widget.isBangla ? 'ঘুম' : 'Sleep';
+      case _LogType.exercise:
+        const namesBn = [
+          'হাঁটা',
+          'দৌড়',
+          'সাইক্লিং',
+          'যোগব্যায়াম',
+          'শক্তি ব্যায়াম',
+        ];
+        const namesEn = ['Walking', 'Running', 'Cycling', 'Yoga', 'Strength'];
+
+        for (var index = 0; index < namesBn.length; index++) {
+          if (entry.title == namesBn[index] || entry.title == namesEn[index]) {
+            return widget.isBangla ? namesBn[index] : namesEn[index];
+          }
+        }
+
+        return entry.title;
+      case _LogType.meal:
+        for (final food in _foods) {
+          if (entry.title == food.nameBn || entry.title == food.nameEn) {
+            return widget.isBangla ? food.nameBn : food.nameEn;
+          }
+        }
+
+        return entry.title;
+    }
+  }
+
+  String _localizedEntryDetails(_DailyLogEntry entry) {
+    switch (entry.type) {
+      case _LogType.water:
+      case _LogType.softDrink:
+        return widget.isBangla ? 'আজ' : 'Today';
+      case _LogType.exercise:
+        return widget.isBangla ? 'ব্যায়াম' : 'Exercise';
+      case _LogType.sleep:
+        return widget.isBangla ? 'গত রাত' : 'Last night';
+      case _LogType.meal:
+        return entry.details
+            .split(' • ')
+            .map(_localizedMealDetailPart)
+            .join(' • ');
+    }
+  }
+
+  String _localizedMealDetailPart(String part) {
+    const mealTimesBn = ['সকাল', 'দুপুর', 'বিকাল', 'রাত'];
+    const mealTimesEn = ['Morning', 'Noon', 'Afternoon', 'Night'];
+
+    for (var index = 0; index < mealTimesBn.length; index++) {
+      if (part == mealTimesBn[index] || part == mealTimesEn[index]) {
+        return widget.isBangla ? mealTimesBn[index] : mealTimesEn[index];
+      }
+    }
+
+    for (final food in _foods) {
+      for (final portion in food.portions) {
+        if (part == portion.nameBn || part == portion.nameEn) {
+          return widget.isBangla ? portion.nameBn : portion.nameEn;
+        }
+      }
+    }
+
+    for (final portion in _customPortions) {
+      if (part == portion.nameBn || part == portion.nameEn) {
+        return widget.isBangla ? portion.nameBn : portion.nameEn;
+      }
+    }
+
+    for (final category in _customFoodCategories) {
+      if (part == category.nameBn || part == category.nameEn) {
+        return widget.isBangla ? category.nameBn : category.nameEn;
+      }
+    }
+
+    return part;
+  }
+
   String _amountText(_DailyLogEntry entry) {
     switch (entry.type) {
       case _LogType.meal:
@@ -1197,8 +1283,8 @@ class _DailyLogScreenState extends State<DailyLogScreen>
                   margin: const EdgeInsets.only(bottom: 10),
                   child: ListTile(
                     leading: CircleAvatar(child: Icon(_typeIcon(entry.type))),
-                    title: Text(entry.title),
-                    subtitle: Text(entry.details),
+                    title: Text(_localizedEntryTitle(entry)),
+                    subtitle: Text(_localizedEntryDetails(entry)),
                     trailing: Row(
                       mainAxisSize: MainAxisSize.min,
                       children: [
