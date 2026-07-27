@@ -51,6 +51,30 @@ class StoredDailyLogEntry {
   }
 }
 
+class DailyLogSummary {
+  const DailyLogSummary({
+    required this.calories,
+    required this.waterGlasses,
+    required this.softDrinkMl,
+    required this.exerciseMinutes,
+    required this.sleepHours,
+  });
+
+  static const DailyLogSummary empty = DailyLogSummary(
+    calories: 0,
+    waterGlasses: 0,
+    softDrinkMl: 0,
+    exerciseMinutes: 0,
+    sleepHours: 0,
+  );
+
+  final int calories;
+  final int waterGlasses;
+  final int softDrinkMl;
+  final int exerciseMinutes;
+  final double sleepHours;
+}
+
 class DailyLogStorageService {
   DailyLogStorageService._();
 
@@ -81,6 +105,44 @@ class DailyLogStorageService {
     } on FormatException {
       return const [];
     }
+  }
+
+  Future<DailyLogSummary> loadTodaySummary() async {
+    final entries = await loadTodayEntries();
+
+    var calories = 0;
+    var waterGlasses = 0;
+    var softDrinkMl = 0;
+    var exerciseMinutes = 0;
+    var sleepHours = 0.0;
+
+    for (final entry in entries) {
+      switch (entry.typeIndex) {
+        case 0:
+          calories += entry.amount.round();
+          break;
+        case 1:
+          waterGlasses += entry.amount.round();
+          break;
+        case 2:
+          softDrinkMl += entry.amount.round();
+          break;
+        case 3:
+          exerciseMinutes += entry.amount.round();
+          break;
+        case 4:
+          sleepHours += entry.amount;
+          break;
+      }
+    }
+
+    return DailyLogSummary(
+      calories: calories,
+      waterGlasses: waterGlasses,
+      softDrinkMl: softDrinkMl,
+      exerciseMinutes: exerciseMinutes,
+      sleepHours: sleepHours,
+    );
   }
 
   Future<void> saveTodayEntries(List<StoredDailyLogEntry> entries) async {

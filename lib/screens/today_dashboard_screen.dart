@@ -3,6 +3,7 @@ import 'dart:async';
 import 'package:flutter/foundation.dart';
 import 'package:flutter/material.dart';
 
+import '../services/daily_log_storage_service.dart';
 import '../services/habit_storage_service.dart';
 
 class TodayDashboardScreen extends StatefulWidget {
@@ -37,6 +38,7 @@ class _TodayDashboardScreenState extends State<TodayDashboardScreen>
     with WidgetsBindingObserver {
   List<bool> _completedHabits = [false, false, false];
   StoredDailyCheckIn? _dailyCheckIn;
+  DailyLogSummary _dailyLogSummary = DailyLogSummary.empty;
   int _summaryLoadGeneration = 0;
 
   bool get isBangla => widget.isBangla;
@@ -56,6 +58,12 @@ class _TodayDashboardScreenState extends State<TodayDashboardScreen>
       : _completedHabitCount / _completedHabits.length;
 
   bool get _hasDailyCheckIn => _dailyCheckIn != null;
+
+  double get _calorieProgress => targetCaloriesMax <= 0
+      ? 0.0
+      : (_dailyLogSummary.calories / targetCaloriesMax)
+            .clamp(0.0, 1.0)
+            .toDouble();
 
   @override
   void initState() {
@@ -94,9 +102,12 @@ class _TodayDashboardScreenState extends State<TodayDashboardScreen>
       final completionsFuture = HabitStorageService.instance
           .loadTodayCompletions(_completedHabits.length);
       final checkInFuture = HabitStorageService.instance.loadTodayCheckIn();
+      final dailyLogSummaryFuture = DailyLogStorageService.instance
+          .loadTodaySummary();
 
       final savedCompletions = await completionsFuture;
       final savedCheckIn = await checkInFuture;
+      final savedDailyLogSummary = await dailyLogSummaryFuture;
 
       if (!mounted || loadGeneration != _summaryLoadGeneration) {
         return;
@@ -105,6 +116,7 @@ class _TodayDashboardScreenState extends State<TodayDashboardScreen>
       setState(() {
         _completedHabits = savedCompletions;
         _dailyCheckIn = savedCheckIn;
+        _dailyLogSummary = savedDailyLogSummary;
       });
     } catch (_) {
       // Summary read ব্যর্থ হলে আগের visible state রাখা হবে।
@@ -398,7 +410,7 @@ class _TodayDashboardScreenState extends State<TodayDashboardScreen>
                             ),
                           ),
                           Text(
-                            '0 kcal',
+                            '≈ ${_dailyLogSummary.calories} kcal',
                             style: theme.textTheme.titleMedium?.copyWith(
                               color: colorScheme.primary,
                               fontWeight: FontWeight.bold,
@@ -409,25 +421,27 @@ class _TodayDashboardScreenState extends State<TodayDashboardScreen>
                       const SizedBox(height: 14),
                       ClipRRect(
                         borderRadius: BorderRadius.circular(20),
-                        child: const LinearProgressIndicator(
-                          value: 0.0,
+                        child: LinearProgressIndicator(
+                          value: _calorieProgress,
                           minHeight: 10,
                         ),
                       ),
                       const SizedBox(height: 10),
                       Text(
-                        isBangla
-                            ? 'Target: $targetCaloriesMin–$targetCaloriesMax kcal'
-                            : 'Target: $targetCaloriesMin–$targetCaloriesMax kcal',
+                        'Target: $targetCaloriesMin–$targetCaloriesMax kcal',
                         style: theme.textTheme.bodyMedium?.copyWith(
                           color: colorScheme.onSurfaceVariant,
                         ),
                       ),
                       const SizedBox(height: 4),
                       Text(
-                        isBangla
-                            ? 'খাবার log করার পর এখানে দৈনিক progress দেখা যাবে।'
-                            : 'Daily progress will appear here after meals are logged.',
+                        _dailyLogSummary.calories == 0
+                            ? (isBangla
+                                  ? 'আজকের খাবার যোগ করলে calorie progress এখানে দেখা যাবে।'
+                                  : 'Log today’s meals to see calorie progress here.')
+                            : (isBangla
+                                  ? 'Daily Log-এর খাবার থেকে এই progress আপডেট হয়েছে।'
+                                  : 'This progress is updated from today’s meal log.'),
                         style: theme.textTheme.bodySmall?.copyWith(
                           color: colorScheme.onSurfaceVariant,
                         ),
@@ -435,6 +449,14 @@ class _TodayDashboardScreenState extends State<TodayDashboardScreen>
                     ],
                   ),
                 ),
+              ),
+              const SizedBox(height: 16),
+              _TodayLogSummaryCard(
+                isBangla: isBangla,
+                waterGlasses: _dailyLogSummary.waterGlasses,
+                softDrinkMl: _dailyLogSummary.softDrinkMl,
+                exerciseMinutes: _dailyLogSummary.exerciseMinutes,
+                sleepHours: _dailyLogSummary.sleepHours,
               ),
               const SizedBox(height: 16),
               _TodayHabitSummaryCard(
@@ -552,6 +574,129 @@ class _TodayDashboardScreenState extends State<TodayDashboardScreen>
           ),
         ),
       ),
+    );
+  }
+}
+
+class _TodayLogSummaryCard extends StatelessWidget {
+  const _TodayLogSummaryCard({
+    required this.isBangla,
+    required this.waterGlasses,
+    required this.softDrinkMl,
+    required this.exerciseMinutes,
+    required this.sleepHours,
+  });
+
+  final bool isBangla;
+  final int waterGlasses;
+  final int softDrinkMl;
+  final int exerciseMinutes;
+  final double sleepHours;
+
+  @override
+  Widget build(BuildContext context) {
+    final theme = Theme.of(context);
+    final colorScheme = theme.colorScheme;
+
+    return Card(
+      margin: EdgeInsets.zero,
+      elevation: 0,
+      color: colorScheme.surfaceContainerLowest,
+      shape: RoundedRectangleBorder(
+        borderRadius: BorderRadius.circular(18),
+        side: BorderSide(color: colorScheme.outlineVariant),
+      ),
+      child: Padding(
+        padding: const EdgeInsets.all(18),
+        child: Column(
+          crossAxisAlignment: CrossAxisAlignment.stretch,
+          children: [
+            Text(
+              isBangla ? 'আজকের স্বাস্থ্য সারাংশ' : 'Today’s health summary',
+              style: theme.textTheme.titleMedium?.copyWith(
+                fontWeight: FontWeight.w600,
+              ),
+            ),
+            const SizedBox(height: 16),
+            GridView.count(
+              crossAxisCount: 2,
+              shrinkWrap: true,
+              physics: const NeverScrollableScrollPhysics(),
+              mainAxisSpacing: 16,
+              crossAxisSpacing: 12,
+              childAspectRatio: 2.2,
+              children: [
+                _TodaySummaryMetric(
+                  icon: Icons.water_drop,
+                  value: '$waterGlasses',
+                  label: isBangla ? 'গ্লাস পানি' : 'glasses water',
+                ),
+                _TodaySummaryMetric(
+                  icon: Icons.local_drink,
+                  value: '$softDrinkMl ml',
+                  label: isBangla ? 'কোমল পানীয়' : 'soft drink',
+                ),
+                _TodaySummaryMetric(
+                  icon: Icons.directions_run,
+                  value: '$exerciseMinutes',
+                  label: isBangla ? 'মিনিট ব্যায়াম' : 'exercise minutes',
+                ),
+                _TodaySummaryMetric(
+                  icon: Icons.bedtime,
+                  value: sleepHours.toStringAsFixed(1),
+                  label: isBangla ? 'ঘণ্টা ঘুম' : 'sleep hours',
+                ),
+              ],
+            ),
+          ],
+        ),
+      ),
+    );
+  }
+}
+
+class _TodaySummaryMetric extends StatelessWidget {
+  const _TodaySummaryMetric({
+    required this.icon,
+    required this.value,
+    required this.label,
+  });
+
+  final IconData icon;
+  final String value;
+  final String label;
+
+  @override
+  Widget build(BuildContext context) {
+    final theme = Theme.of(context);
+
+    return Row(
+      children: [
+        Icon(icon, color: theme.colorScheme.primary),
+        const SizedBox(width: 10),
+        Expanded(
+          child: Column(
+            mainAxisAlignment: MainAxisAlignment.center,
+            crossAxisAlignment: CrossAxisAlignment.start,
+            children: [
+              Text(
+                value,
+                maxLines: 1,
+                overflow: TextOverflow.ellipsis,
+                style: theme.textTheme.titleSmall?.copyWith(
+                  fontWeight: FontWeight.bold,
+                ),
+              ),
+              Text(
+                label,
+                maxLines: 1,
+                overflow: TextOverflow.ellipsis,
+                style: theme.textTheme.bodySmall,
+              ),
+            ],
+          ),
+        ),
+      ],
     );
   }
 }
