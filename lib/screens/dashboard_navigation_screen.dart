@@ -3,6 +3,7 @@ import 'package:flutter/material.dart';
 import 'daily_log_screen.dart';
 import 'habit_engine_screen.dart';
 import 'progress_screen.dart';
+import 'profile_screen.dart';
 import 'today_dashboard_screen.dart';
 
 class DashboardNavigationScreen extends StatefulWidget {
@@ -36,6 +37,7 @@ class _DashboardNavigationScreenState extends State<DashboardNavigationScreen> {
   int _selectedIndex = 0;
   late final ValueNotifier<int> _todayRefreshNotifier;
   late final ValueNotifier<int> _progressRefreshNotifier;
+  late final ValueNotifier<int> _profileRefreshNotifier;
   late final List<Widget> _pages;
 
   @override
@@ -45,6 +47,7 @@ class _DashboardNavigationScreenState extends State<DashboardNavigationScreen> {
     final isBangla = widget.isBangla;
     _todayRefreshNotifier = ValueNotifier<int>(0);
     _progressRefreshNotifier = ValueNotifier<int>(0);
+    _profileRefreshNotifier = ValueNotifier<int>(0);
 
     _pages = <Widget>[
       TodayDashboardScreen(
@@ -80,13 +83,15 @@ class _DashboardNavigationScreenState extends State<DashboardNavigationScreen> {
             : 'Reliable guidance about food, exercise, sleep, and lifestyle will appear here.',
         isBangla: isBangla,
       ),
-      _DashboardPlaceholderScreen(
-        icon: Icons.person_outline,
-        title: isBangla ? 'প্রোফাইল' : 'Profile',
-        description: isBangla
-            ? 'ব্যক্তিগত তথ্য, health goal, language এবং app settings এখান থেকে পরিবর্তন করা যাবে।'
-            : 'Personal information, health goals, language, and app settings will be managed here.',
+      ProfileScreen(
         isBangla: isBangla,
+        goal: widget.goal,
+        schedule: widget.schedule,
+        activity: widget.activity,
+        sleep: widget.sleep,
+        budget: widget.budget,
+        refreshListenable: _profileRefreshNotifier,
+        onManageBodyInformation: () => _selectPage(3),
       ),
     ];
   }
@@ -97,6 +102,8 @@ class _DashboardNavigationScreenState extends State<DashboardNavigationScreen> {
         _todayRefreshNotifier.value++;
       } else if (index == 3) {
         _progressRefreshNotifier.value++;
+      } else if (index == 5) {
+        _profileRefreshNotifier.value++;
       }
       return;
     }
@@ -109,6 +116,8 @@ class _DashboardNavigationScreenState extends State<DashboardNavigationScreen> {
       _todayRefreshNotifier.value++;
     } else if (index == 3) {
       _progressRefreshNotifier.value++;
+    } else if (index == 5) {
+      _profileRefreshNotifier.value++;
     }
   }
 
@@ -116,6 +125,7 @@ class _DashboardNavigationScreenState extends State<DashboardNavigationScreen> {
   void dispose() {
     _todayRefreshNotifier.dispose();
     _progressRefreshNotifier.dispose();
+    _profileRefreshNotifier.dispose();
     super.dispose();
   }
 
