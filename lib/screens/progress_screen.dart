@@ -4,6 +4,7 @@ import 'dart:math' as math;
 import 'package:flutter/foundation.dart';
 import 'package:flutter/material.dart';
 
+import '../services/body_metrics_storage_service.dart';
 import '../services/daily_log_storage_service.dart';
 import '../services/habit_storage_service.dart';
 import '../services/weight_storage_service.dart';
@@ -29,6 +30,10 @@ class ProgressScreen extends StatefulWidget {
 enum _ProgressChartMetric { calories, water, exercise, sleep, habits }
 
 enum _WeightGoalDirection { loss, gain, maintain }
+
+enum _BmiCategory { underweight, healthy, overweight, obesity }
+
+enum _HeightEntryMode { metric, imperial }
 
 class _ChartBarData {
   const _ChartBarData({
@@ -92,11 +97,13 @@ class _ProgressScreenState extends State<ProgressScreen>
   List<_ProgressDay> _sevenDayProgress = const [];
   List<StoredWeightEntry> _weightEntries = const [];
   double? _targetWeightKg;
+  double? _heightCm;
   _ProgressChartMetric _selectedChartMetric = _ProgressChartMetric.calories;
 
   bool _isLoading = true;
   bool _isSavingWeight = false;
   bool _isSavingTargetWeight = false;
+  bool _isSavingHeight = false;
   int _loadGeneration = 0;
 
   int get _completedHabitCount =>
@@ -228,6 +235,62 @@ class _ProgressScreenState extends State<ProgressScreen>
     return _weightGoalDirection == _WeightGoalDirection.maintain
         ? remaining <= 0.5
         : remaining <= 0.05;
+  }
+
+  double? get _bmi {
+    final latestWeight = _latestWeight;
+    final heightCm = _heightCm;
+
+    if (latestWeight == null || heightCm == null || heightCm <= 0) {
+      return null;
+    }
+
+    final heightM = heightCm / 100;
+    return latestWeight.weightKg / (heightM * heightM);
+  }
+
+  _BmiCategory? get _bmiCategory {
+    final bmi = _bmi;
+
+    if (bmi == null) {
+      return null;
+    }
+
+    if (bmi < 18.5) {
+      return _BmiCategory.underweight;
+    }
+
+    if (bmi < 25) {
+      return _BmiCategory.healthy;
+    }
+
+    if (bmi < 30) {
+      return _BmiCategory.overweight;
+    }
+
+    return _BmiCategory.obesity;
+  }
+
+  double? get _healthyWeightMinKg {
+    final heightCm = _heightCm;
+
+    if (heightCm == null || heightCm <= 0) {
+      return null;
+    }
+
+    final heightM = heightCm / 100;
+    return 18.5 * heightM * heightM;
+  }
+
+  double? get _healthyWeightMaxKg {
+    final heightCm = _heightCm;
+
+    if (heightCm == null || heightCm <= 0) {
+      return null;
+    }
+
+    final heightM = heightCm / 100;
+    return 24.9 * heightM * heightM;
   }
 
   List<_WeightTrendPoint> get _weightTrendPoints {
@@ -364,10 +427,12 @@ class _ProgressScreenState extends State<ProgressScreen>
       final weightEntriesFuture = WeightStorageService.instance.loadEntries();
       final targetWeightFuture = WeightStorageService.instance
           .loadTargetWeight();
+      final heightFuture = BodyMetricsStorageService.instance.loadHeightCm();
 
       final sevenDayProgress = await sevenDayProgressFuture;
       final weightEntries = await weightEntriesFuture;
       final targetWeightKg = await targetWeightFuture;
+      final heightCm = await heightFuture;
 
       if (!mounted || loadGeneration != _loadGeneration) {
         return;
@@ -382,6 +447,7 @@ class _ProgressScreenState extends State<ProgressScreen>
         _sevenDayProgress = sevenDayProgress;
         _weightEntries = weightEntries;
         _targetWeightKg = targetWeightKg;
+        _heightCm = heightCm;
         _isLoading = false;
       });
     } catch (_) {
@@ -687,6 +753,74 @@ class _ProgressScreenState extends State<ProgressScreen>
     }
   }
 
+  Future<void> _showHeightEntrySheet() async {
+    final heightCm = await showModalBottomSheet<double>(
+      context: context,
+      isScrollControlled: true,
+      showDragHandle: true,
+      builder: (sheetContext) {
+        return _HeightEntrySheet(
+          isBangla: widget.isBangla,
+          initialHeightCm: _heightCm,
+        );
+      },
+    );
+
+    if (heightCm == null || !mounted) {
+      return;
+    }
+
+    setState(() {
+      _isSavingHeight = true;
+    });
+
+    try {
+      await BodyMetricsStorageService.instance.saveHeightCm(heightCm);
+
+      if (!mounted) {
+        return;
+      }
+
+      setState(() {
+        _heightCm = heightCm;
+      });
+
+      ScaffoldMessenger.of(context)
+        ..hideCurrentSnackBar()
+        ..showSnackBar(
+          SnackBar(
+            content: Text(
+              widget.isBangla
+                  ? 'উচ্চতা সংরক্ষণ হয়েছে।'
+                  : 'The height has been saved.',
+            ),
+          ),
+        );
+    } catch (_) {
+      if (!mounted) {
+        return;
+      }
+
+      ScaffoldMessenger.of(context)
+        ..hideCurrentSnackBar()
+        ..showSnackBar(
+          SnackBar(
+            content: Text(
+              widget.isBangla
+                  ? 'উচ্চতা সংরক্ষণ করা যায়নি। আবার চেষ্টা করুন।'
+                  : 'The height could not be saved. Please try again.',
+            ),
+          ),
+        );
+    } finally {
+      if (mounted) {
+        setState(() {
+          _isSavingHeight = false;
+        });
+      }
+    }
+  }
+
   String _moodName(int moodIndex) {
     switch (moodIndex) {
       case 0:
@@ -944,6 +1078,18 @@ class _ProgressScreenState extends State<ProgressScreen>
                 onSetTarget: _showTargetWeightSheet,
               ),
               const SizedBox(height: 14),
+              _BmiInsightsCard(
+                isBangla: widget.isBangla,
+                latestWeightKg: _latestWeight?.weightKg,
+                heightCm: _heightCm,
+                bmi: _bmi,
+                category: _bmiCategory,
+                healthyWeightMinKg: _healthyWeightMinKg,
+                healthyWeightMaxKg: _healthyWeightMaxKg,
+                isSavingHeight: _isSavingHeight,
+                onSetHeight: _showHeightEntrySheet,
+              ),
+              const SizedBox(height: 14),
               _WeightTrendCard(
                 isBangla: widget.isBangla,
                 points: _weightTrendPoints,
@@ -1199,6 +1345,274 @@ class _ProgressScreenState extends State<ProgressScreen>
               ),
             ],
           ),
+        ),
+      ),
+    );
+  }
+}
+
+class _HeightEntrySheet extends StatefulWidget {
+  const _HeightEntrySheet({
+    required this.isBangla,
+    required this.initialHeightCm,
+  });
+
+  final bool isBangla;
+  final double? initialHeightCm;
+
+  @override
+  State<_HeightEntrySheet> createState() => _HeightEntrySheetState();
+}
+
+class _HeightEntrySheetState extends State<_HeightEntrySheet> {
+  late final TextEditingController _centimetreController;
+  late final TextEditingController _feetController;
+  late final TextEditingController _inchesController;
+
+  _HeightEntryMode _mode = _HeightEntryMode.metric;
+  String? _errorText;
+
+  @override
+  void initState() {
+    super.initState();
+
+    final initialHeightCm = widget.initialHeightCm;
+    _centimetreController = TextEditingController(
+      text: initialHeightCm?.toStringAsFixed(1) ?? '',
+    );
+
+    var feetText = '';
+    var inchesText = '';
+
+    if (initialHeightCm != null) {
+      var totalInches = (initialHeightCm / 2.54).round();
+      final feet = totalInches ~/ 12;
+      var inches = totalInches % 12;
+
+      if (inches == 12) {
+        totalInches += 1;
+        inches = 0;
+      }
+
+      feetText = '$feet';
+      inchesText = '$inches';
+    }
+
+    _feetController = TextEditingController(text: feetText);
+    _inchesController = TextEditingController(text: inchesText);
+  }
+
+  void _clearError() {
+    if (_errorText != null) {
+      setState(() {
+        _errorText = null;
+      });
+    }
+  }
+
+  void _changeMode(_HeightEntryMode mode) {
+    if (_mode == mode) {
+      return;
+    }
+
+    if (_mode == _HeightEntryMode.metric) {
+      final centimetres = double.tryParse(
+        _centimetreController.text.trim().replaceAll(',', '.'),
+      );
+
+      if (centimetres != null && centimetres > 0) {
+        final totalInches = (centimetres / 2.54).round();
+        _feetController.text = '${totalInches ~/ 12}';
+        _inchesController.text = '${totalInches % 12}';
+      }
+    } else {
+      final feet = int.tryParse(_feetController.text.trim());
+      final inches = int.tryParse(_inchesController.text.trim());
+
+      if (feet != null && inches != null && inches >= 0 && inches <= 11) {
+        final centimetres = ((feet * 12) + inches) * 2.54;
+        _centimetreController.text = centimetres.toStringAsFixed(1);
+      }
+    }
+
+    setState(() {
+      _mode = mode;
+      _errorText = null;
+    });
+  }
+
+  double? _validatedHeightCm() {
+    double? heightCm;
+
+    if (_mode == _HeightEntryMode.metric) {
+      heightCm = double.tryParse(
+        _centimetreController.text.trim().replaceAll(',', '.'),
+      );
+    } else {
+      final feet = int.tryParse(_feetController.text.trim());
+      final inches = int.tryParse(_inchesController.text.trim());
+
+      if (feet != null &&
+          inches != null &&
+          feet >= 0 &&
+          inches >= 0 &&
+          inches <= 11) {
+        heightCm = ((feet * 12) + inches) * 2.54;
+      }
+    }
+
+    if (heightCm == null || heightCm < 100 || heightCm > 250) {
+      setState(() {
+        _errorText = widget.isBangla
+            ? '১০০ থেকে ২৫০ সেমির মধ্যে সঠিক উচ্চতা লিখুন।'
+            : 'Enter a valid height between 100 and 250 cm.';
+      });
+      return null;
+    }
+
+    return heightCm;
+  }
+
+  void _submit() {
+    final heightCm = _validatedHeightCm();
+
+    if (heightCm != null) {
+      Navigator.of(context).pop(heightCm);
+    }
+  }
+
+  @override
+  void dispose() {
+    _centimetreController.dispose();
+    _feetController.dispose();
+    _inchesController.dispose();
+    super.dispose();
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    final theme = Theme.of(context);
+
+    return SafeArea(
+      child: SingleChildScrollView(
+        keyboardDismissBehavior: ScrollViewKeyboardDismissBehavior.onDrag,
+        padding: EdgeInsets.fromLTRB(
+          16,
+          0,
+          16,
+          MediaQuery.viewInsetsOf(context).bottom + 20,
+        ),
+        child: Column(
+          mainAxisSize: MainAxisSize.min,
+          crossAxisAlignment: CrossAxisAlignment.stretch,
+          children: [
+            Text(
+              widget.initialHeightCm == null
+                  ? (widget.isBangla ? 'উচ্চতা যোগ করুন' : 'Add height')
+                  : (widget.isBangla ? 'উচ্চতা আপডেট করুন' : 'Update height'),
+              style: theme.textTheme.titleLarge?.copyWith(
+                fontWeight: FontWeight.bold,
+              ),
+            ),
+            const SizedBox(height: 6),
+            Text(
+              widget.isBangla
+                  ? 'BMI ও healthy weight range হিসাবের জন্য উচ্চতা ব্যবহার হবে।'
+                  : 'Height is used to calculate BMI and the healthy weight reference range.',
+            ),
+            const SizedBox(height: 18),
+            SegmentedButton<_HeightEntryMode>(
+              segments: [
+                ButtonSegment(
+                  value: _HeightEntryMode.metric,
+                  icon: const Icon(Icons.straighten),
+                  label: Text(widget.isBangla ? 'সেমি' : 'cm'),
+                ),
+                ButtonSegment(
+                  value: _HeightEntryMode.imperial,
+                  icon: const Icon(Icons.height),
+                  label: Text(widget.isBangla ? 'ফুট/ইঞ্চি' : 'ft/in'),
+                ),
+              ],
+              selected: {_mode},
+              onSelectionChanged: (selection) {
+                _changeMode(selection.first);
+              },
+            ),
+            const SizedBox(height: 18),
+            if (_mode == _HeightEntryMode.metric)
+              TextField(
+                controller: _centimetreController,
+                autofocus: true,
+                keyboardType: const TextInputType.numberWithOptions(
+                  decimal: true,
+                ),
+                textInputAction: TextInputAction.done,
+                decoration: InputDecoration(
+                  labelText: widget.isBangla ? 'উচ্চতা (সেমি)' : 'Height (cm)',
+                  hintText: '170',
+                  suffixText: 'cm',
+                  errorText: _errorText,
+                  border: const OutlineInputBorder(),
+                ),
+                onChanged: (_) => _clearError(),
+                onSubmitted: (_) => _submit(),
+              )
+            else ...[
+              Row(
+                children: [
+                  Expanded(
+                    child: TextField(
+                      controller: _feetController,
+                      autofocus: true,
+                      keyboardType: TextInputType.number,
+                      textInputAction: TextInputAction.next,
+                      decoration: InputDecoration(
+                        labelText: widget.isBangla ? 'ফুট' : 'Feet',
+                        hintText: '5',
+                        suffixText: 'ft',
+                        border: const OutlineInputBorder(),
+                      ),
+                      onChanged: (_) => _clearError(),
+                    ),
+                  ),
+                  const SizedBox(width: 12),
+                  Expanded(
+                    child: TextField(
+                      controller: _inchesController,
+                      keyboardType: TextInputType.number,
+                      textInputAction: TextInputAction.done,
+                      decoration: InputDecoration(
+                        labelText: widget.isBangla ? 'ইঞ্চি' : 'Inches',
+                        hintText: '7',
+                        suffixText: 'in',
+                        border: const OutlineInputBorder(),
+                      ),
+                      onChanged: (_) => _clearError(),
+                      onSubmitted: (_) => _submit(),
+                    ),
+                  ),
+                ],
+              ),
+              if (_errorText != null) ...[
+                const SizedBox(height: 8),
+                Text(
+                  _errorText!,
+                  style: theme.textTheme.bodySmall?.copyWith(
+                    color: theme.colorScheme.error,
+                  ),
+                ),
+              ],
+            ],
+            const SizedBox(height: 18),
+            FilledButton.icon(
+              onPressed: _submit,
+              icon: const Icon(Icons.save_outlined),
+              label: Text(
+                widget.isBangla ? 'উচ্চতা সংরক্ষণ করুন' : 'Save height',
+              ),
+            ),
+          ],
         ),
       ),
     );
@@ -1843,6 +2257,273 @@ class _WeightGoalCard extends StatelessWidget {
                           ? 'লক্ষ্য ওজন আপডেট করুন'
                           : 'Update target weight')
                     : (isBangla ? 'লক্ষ্য ওজন ঠিক করুন' : 'Set target weight'),
+              ),
+            ),
+          ],
+        ),
+      ),
+    );
+  }
+}
+
+class _BmiInsightsCard extends StatelessWidget {
+  const _BmiInsightsCard({
+    required this.isBangla,
+    required this.latestWeightKg,
+    required this.heightCm,
+    required this.bmi,
+    required this.category,
+    required this.healthyWeightMinKg,
+    required this.healthyWeightMaxKg,
+    required this.isSavingHeight,
+    required this.onSetHeight,
+  });
+
+  final bool isBangla;
+  final double? latestWeightKg;
+  final double? heightCm;
+  final double? bmi;
+  final _BmiCategory? category;
+  final double? healthyWeightMinKg;
+  final double? healthyWeightMaxKg;
+  final bool isSavingHeight;
+  final VoidCallback onSetHeight;
+
+  String _categoryLabel() {
+    switch (category) {
+      case _BmiCategory.underweight:
+        return isBangla ? 'কম ওজন' : 'Underweight';
+      case _BmiCategory.healthy:
+        return isBangla ? 'স্বাস্থ্যকর ওজনের range' : 'Healthy weight range';
+      case _BmiCategory.overweight:
+        return isBangla ? 'অতিরিক্ত ওজন' : 'Overweight';
+      case _BmiCategory.obesity:
+        return isBangla ? 'স্থূলতার range' : 'Obesity range';
+      case null:
+        return '—';
+    }
+  }
+
+  String _categoryMessage() {
+    switch (category) {
+      case _BmiCategory.underweight:
+        return isBangla
+            ? 'BMI adult reference range-এর নিচে। অনিচ্ছাকৃতভাবে ওজন কমলে স্বাস্থ্যকর্মীর পরামর্শ নিন।'
+            : 'BMI is below the adult reference range. Seek professional advice if weight loss was unintentional.';
+      case _BmiCategory.healthy:
+        return isBangla
+            ? 'BMI adult healthy-weight reference range-এর মধ্যে আছে।'
+            : 'BMI is within the adult healthy-weight reference range.';
+      case _BmiCategory.overweight:
+        return isBangla
+            ? 'BMI adult healthy-weight reference range-এর উপরে। BMI শরীরের গঠন সরাসরি মাপে না।'
+            : 'BMI is above the adult healthy-weight reference range. BMI does not directly measure body composition.';
+      case _BmiCategory.obesity:
+        return isBangla
+            ? 'BMI adult obesity range-এ আছে। ব্যক্তিগত স্বাস্থ্যঝুঁকি বুঝতে স্বাস্থ্যকর্মীর পরামর্শ সহায়ক হতে পারে।'
+            : 'BMI is in the adult obesity range. Professional guidance may help assess individual health risk.';
+      case null:
+        return '';
+    }
+  }
+
+  String _heightText() {
+    final value = heightCm;
+
+    if (value == null) {
+      return '—';
+    }
+
+    final totalInches = (value / 2.54).round();
+    final feet = totalInches ~/ 12;
+    final inches = totalInches % 12;
+
+    return '${value.toStringAsFixed(1)} cm • $feet ft $inches in';
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    final theme = Theme.of(context);
+    final colorScheme = theme.colorScheme;
+    final hasHeight = heightCm != null;
+    final hasWeight = latestWeightKg != null;
+    final hasInsights = bmi != null && category != null;
+
+    return Card(
+      margin: EdgeInsets.zero,
+      elevation: 0,
+      color: colorScheme.surfaceContainerLowest,
+      shape: RoundedRectangleBorder(
+        borderRadius: BorderRadius.circular(18),
+        side: BorderSide(color: colorScheme.outlineVariant),
+      ),
+      child: Padding(
+        padding: const EdgeInsets.all(18),
+        child: Column(
+          crossAxisAlignment: CrossAxisAlignment.stretch,
+          children: [
+            Row(
+              children: [
+                Container(
+                  width: 46,
+                  height: 46,
+                  decoration: BoxDecoration(
+                    color: colorScheme.primaryContainer,
+                    borderRadius: BorderRadius.circular(13),
+                  ),
+                  child: Icon(
+                    Icons.health_and_safety_outlined,
+                    color: colorScheme.onPrimaryContainer,
+                  ),
+                ),
+                const SizedBox(width: 12),
+                Expanded(
+                  child: Text(
+                    isBangla
+                        ? 'বিএমআই ও স্বাস্থ্যকর ওজন বিশ্লেষণ'
+                        : 'BMI and healthy weight insights',
+                    style: theme.textTheme.titleMedium?.copyWith(
+                      fontWeight: FontWeight.w600,
+                    ),
+                  ),
+                ),
+              ],
+            ),
+            const SizedBox(height: 16),
+            if (!hasHeight)
+              Text(
+                isBangla
+                    ? 'BMI হিসাব করতে প্রথমে আপনার উচ্চতা যোগ করুন।'
+                    : 'Add your height first to calculate BMI.',
+                style: theme.textTheme.bodyMedium?.copyWith(
+                  color: colorScheme.onSurfaceVariant,
+                ),
+              )
+            else if (!hasWeight)
+              Text(
+                isBangla
+                    ? 'উচ্চতা সংরক্ষিত হয়েছে। BMI হিসাব করতে অন্তত একটি ওজনের entry যোগ করুন।'
+                    : 'Height is saved. Add at least one weight entry to calculate BMI.',
+                style: theme.textTheme.bodyMedium?.copyWith(
+                  color: colorScheme.onSurfaceVariant,
+                ),
+              )
+            else if (hasInsights) ...[
+              Row(
+                crossAxisAlignment: CrossAxisAlignment.start,
+                children: [
+                  Expanded(
+                    child: Column(
+                      crossAxisAlignment: CrossAxisAlignment.start,
+                      children: [
+                        Text(
+                          bmi!.toStringAsFixed(1),
+                          style: theme.textTheme.headlineMedium?.copyWith(
+                            color: colorScheme.primary,
+                            fontWeight: FontWeight.bold,
+                          ),
+                        ),
+                        Text(
+                          'BMI',
+                          style: theme.textTheme.bodySmall?.copyWith(
+                            color: colorScheme.onSurfaceVariant,
+                          ),
+                        ),
+                      ],
+                    ),
+                  ),
+                  Container(
+                    padding: const EdgeInsets.symmetric(
+                      horizontal: 12,
+                      vertical: 7,
+                    ),
+                    decoration: BoxDecoration(
+                      color: colorScheme.secondaryContainer,
+                      borderRadius: BorderRadius.circular(20),
+                    ),
+                    child: Text(
+                      _categoryLabel(),
+                      style: theme.textTheme.labelLarge?.copyWith(
+                        color: colorScheme.onSecondaryContainer,
+                        fontWeight: FontWeight.w600,
+                      ),
+                    ),
+                  ),
+                ],
+              ),
+              const SizedBox(height: 16),
+              Row(
+                children: [
+                  Expanded(
+                    child: _WeightSummaryValue(
+                      label: isBangla ? 'সর্বশেষ ওজন' : 'Latest weight',
+                      value: '${latestWeightKg!.toStringAsFixed(1)} kg',
+                    ),
+                  ),
+                  const SizedBox(width: 12),
+                  Expanded(
+                    child: _WeightSummaryValue(
+                      label: isBangla ? 'উচ্চতা' : 'Height',
+                      value: _heightText(),
+                    ),
+                  ),
+                ],
+              ),
+              const SizedBox(height: 16),
+              Container(
+                padding: const EdgeInsets.all(14),
+                decoration: BoxDecoration(
+                  color: colorScheme.surfaceContainerHigh,
+                  borderRadius: BorderRadius.circular(14),
+                ),
+                child: Row(
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  children: [
+                    Icon(Icons.balance_outlined, color: colorScheme.primary),
+                    const SizedBox(width: 10),
+                    Expanded(
+                      child: Text(
+                        isBangla
+                            ? 'আপনার উচ্চতায় adult healthy-weight reference: ${healthyWeightMinKg!.toStringAsFixed(1)}–${healthyWeightMaxKg!.toStringAsFixed(1)} kg'
+                            : 'Adult healthy-weight reference for your height: ${healthyWeightMinKg!.toStringAsFixed(1)}–${healthyWeightMaxKg!.toStringAsFixed(1)} kg',
+                        style: theme.textTheme.bodyMedium?.copyWith(
+                          fontWeight: FontWeight.w600,
+                        ),
+                      ),
+                    ),
+                  ],
+                ),
+              ),
+              const SizedBox(height: 12),
+              Text(
+                _categoryMessage(),
+                style: theme.textTheme.bodyMedium?.copyWith(
+                  color: colorScheme.onSurfaceVariant,
+                ),
+              ),
+            ],
+            const SizedBox(height: 18),
+            OutlinedButton.icon(
+              onPressed: isSavingHeight ? null : onSetHeight,
+              icon: isSavingHeight
+                  ? const SizedBox.square(
+                      dimension: 18,
+                      child: CircularProgressIndicator(strokeWidth: 2),
+                    )
+                  : const Icon(Icons.height),
+              label: Text(
+                hasHeight
+                    ? (isBangla ? 'উচ্চতা আপডেট করুন' : 'Update height')
+                    : (isBangla ? 'উচ্চতা যোগ করুন' : 'Add height'),
+              ),
+            ),
+            const SizedBox(height: 10),
+            Text(
+              isBangla
+                  ? 'BMI একটি adult screening measure—এটি diagnosis বা শরীরের fat-এর সরাসরি measurement নয়।'
+                  : 'BMI is an adult screening measure, not a diagnosis or a direct measurement of body fat.',
+              style: theme.textTheme.bodySmall?.copyWith(
+                color: colorScheme.onSurfaceVariant,
               ),
             ),
           ],
