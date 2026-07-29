@@ -1,4 +1,8 @@
+import 'dart:async';
+
 import 'package:flutter/material.dart';
+
+import '../services/profile_preferences_storage_service.dart';
 
 import 'daily_log_screen.dart';
 import 'habit_engine_screen.dart';
@@ -36,58 +40,88 @@ class DashboardNavigationScreen extends StatefulWidget {
 
 class _DashboardNavigationScreenState extends State<DashboardNavigationScreen> {
   int _selectedIndex = 0;
+  late String _goal;
+  late String _schedule;
+  late String _activity;
+  late String _sleep;
+  late String _budget;
+
   late final ValueNotifier<int> _todayRefreshNotifier;
   late final ValueNotifier<int> _progressRefreshNotifier;
   late final ValueNotifier<int> _profileRefreshNotifier;
-  late final List<Widget> _pages;
 
   @override
   void initState() {
     super.initState();
 
-    final isBangla = widget.isBangla;
+    _goal = widget.goal;
+    _schedule = widget.schedule;
+    _activity = widget.activity;
+    _sleep = widget.sleep;
+    _budget = widget.budget;
+
     _todayRefreshNotifier = ValueNotifier<int>(0);
     _progressRefreshNotifier = ValueNotifier<int>(0);
     _profileRefreshNotifier = ValueNotifier<int>(0);
 
-    _pages = <Widget>[
-      TodayDashboardScreen(
-        isBangla: isBangla,
-        goal: widget.goal,
-        targetCaloriesMin: widget.targetCaloriesMin,
-        targetCaloriesMax: widget.targetCaloriesMax,
-        schedule: widget.schedule,
-        activity: widget.activity,
-        sleep: widget.sleep,
-        budget: widget.budget,
-        refreshListenable: _todayRefreshNotifier,
-        onOpenLog: () => _selectPage(1),
-        onOpenHabits: () => _selectPage(2),
-      ),
-      DailyLogScreen(
-        isBangla: isBangla,
-        targetCaloriesMin: widget.targetCaloriesMin,
-        targetCaloriesMax: widget.targetCaloriesMax,
-      ),
-      HabitEngineScreen(isBangla: isBangla),
-      ProgressScreen(
-        isBangla: isBangla,
-        targetCaloriesMin: widget.targetCaloriesMin,
-        targetCaloriesMax: widget.targetCaloriesMax,
-        refreshListenable: _progressRefreshNotifier,
-      ),
-      LearnScreen(isBangla: isBangla),
-      ProfileScreen(
-        isBangla: isBangla,
-        goal: widget.goal,
-        schedule: widget.schedule,
-        activity: widget.activity,
-        sleep: widget.sleep,
-        budget: widget.budget,
-        refreshListenable: _profileRefreshNotifier,
-        onManageBodyInformation: () => _selectPage(3),
-      ),
-    ];
+    unawaited(_loadSavedProfilePreferences());
+  }
+
+  StoredProfilePreferences get _currentPreferences {
+    return StoredProfilePreferences(
+      goal: _goal,
+      schedule: _schedule,
+      activity: _activity,
+      sleep: _sleep,
+      budget: _budget,
+    );
+  }
+
+  Future<void> _loadSavedProfilePreferences() async {
+    try {
+      final preferences = await ProfilePreferencesStorageService.instance
+          .loadPreferences(fallback: _currentPreferences);
+
+      if (!mounted) {
+        return;
+      }
+
+      setState(() {
+        _goal = preferences.goal;
+        _schedule = preferences.schedule;
+        _activity = preferences.activity;
+        _sleep = preferences.sleep;
+        _budget = preferences.budget;
+      });
+
+      _todayRefreshNotifier.value++;
+      _profileRefreshNotifier.value++;
+    } catch (_) {
+      // Storage read ব্যর্থ হলে assessment থেকে পাওয়া visible values রাখা হবে।
+    }
+  }
+
+  Future<void> _saveProfilePreferences(
+    StoredProfilePreferences preferences,
+  ) async {
+    await ProfilePreferencesStorageService.instance.savePreferences(
+      preferences,
+    );
+
+    if (!mounted) {
+      return;
+    }
+
+    setState(() {
+      _goal = preferences.goal;
+      _schedule = preferences.schedule;
+      _activity = preferences.activity;
+      _sleep = preferences.sleep;
+      _budget = preferences.budget;
+    });
+
+    _todayRefreshNotifier.value++;
+    _profileRefreshNotifier.value++;
   }
 
   void _selectPage(int index) {
@@ -123,9 +157,54 @@ class _DashboardNavigationScreenState extends State<DashboardNavigationScreen> {
     super.dispose();
   }
 
+  List<Widget> _buildPages() {
+    final isBangla = widget.isBangla;
+
+    return <Widget>[
+      TodayDashboardScreen(
+        isBangla: isBangla,
+        goal: _goal,
+        targetCaloriesMin: widget.targetCaloriesMin,
+        targetCaloriesMax: widget.targetCaloriesMax,
+        schedule: _schedule,
+        activity: _activity,
+        sleep: _sleep,
+        budget: _budget,
+        refreshListenable: _todayRefreshNotifier,
+        onOpenLog: () => _selectPage(1),
+        onOpenHabits: () => _selectPage(2),
+      ),
+      DailyLogScreen(
+        isBangla: isBangla,
+        targetCaloriesMin: widget.targetCaloriesMin,
+        targetCaloriesMax: widget.targetCaloriesMax,
+      ),
+      HabitEngineScreen(isBangla: isBangla),
+      ProgressScreen(
+        isBangla: isBangla,
+        targetCaloriesMin: widget.targetCaloriesMin,
+        targetCaloriesMax: widget.targetCaloriesMax,
+        refreshListenable: _progressRefreshNotifier,
+      ),
+      LearnScreen(isBangla: isBangla),
+      ProfileScreen(
+        isBangla: isBangla,
+        goal: _goal,
+        schedule: _schedule,
+        activity: _activity,
+        sleep: _sleep,
+        budget: _budget,
+        refreshListenable: _profileRefreshNotifier,
+        onManageBodyInformation: () => _selectPage(3),
+        onSavePreferences: _saveProfilePreferences,
+      ),
+    ];
+  }
+
   @override
   Widget build(BuildContext context) {
     final isBangla = widget.isBangla;
+    final pages = _buildPages();
 
     return PopScope<void>(
       canPop: _selectedIndex == 0,
@@ -140,7 +219,7 @@ class _DashboardNavigationScreenState extends State<DashboardNavigationScreen> {
         _todayRefreshNotifier.value++;
       },
       child: Scaffold(
-        body: IndexedStack(index: _selectedIndex, children: _pages),
+        body: IndexedStack(index: _selectedIndex, children: pages),
         bottomNavigationBar: NavigationBar(
           selectedIndex: _selectedIndex,
           onDestinationSelected: _selectPage,

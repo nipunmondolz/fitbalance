@@ -4,6 +4,7 @@ import 'package:flutter/foundation.dart';
 import 'package:flutter/material.dart';
 
 import '../services/body_metrics_storage_service.dart';
+import '../services/profile_preferences_storage_service.dart';
 import '../services/weight_storage_service.dart';
 
 class ProfileScreen extends StatefulWidget {
@@ -16,6 +17,7 @@ class ProfileScreen extends StatefulWidget {
     required this.budget,
     required this.refreshListenable,
     required this.onManageBodyInformation,
+    required this.onSavePreferences,
     super.key,
   });
 
@@ -27,6 +29,8 @@ class ProfileScreen extends StatefulWidget {
   final String budget;
   final ValueListenable<int> refreshListenable;
   final VoidCallback onManageBodyInformation;
+  final Future<void> Function(StoredProfilePreferences preferences)
+  onSavePreferences;
 
   @override
   State<ProfileScreen> createState() => _ProfileScreenState();
@@ -40,6 +44,7 @@ class _ProfileScreenState extends State<ProfileScreen>
   double? _targetWeightKg;
   double? _heightCm;
   bool _isLoading = true;
+  bool _isSavingPreferences = false;
   int _loadGeneration = 0;
 
   StoredWeightEntry? get _latestWeight =>
@@ -137,6 +142,77 @@ class _ProfileScreenState extends State<ProfileScreen>
       setState(() {
         _isLoading = false;
       });
+    }
+  }
+
+  Future<void> _showProfilePreferencesEditor() async {
+    final updatedPreferences =
+        await showModalBottomSheet<StoredProfilePreferences>(
+          context: context,
+          isScrollControlled: true,
+          showDragHandle: true,
+          builder: (sheetContext) {
+            return _ProfilePreferencesEditorSheet(
+              isBangla: widget.isBangla,
+              initialPreferences: StoredProfilePreferences(
+                goal: widget.goal,
+                schedule: widget.schedule,
+                activity: widget.activity,
+                sleep: widget.sleep,
+                budget: widget.budget,
+              ),
+            );
+          },
+        );
+
+    if (updatedPreferences == null || !mounted) {
+      return;
+    }
+
+    setState(() {
+      _isSavingPreferences = true;
+    });
+
+    try {
+      await widget.onSavePreferences(updatedPreferences);
+
+      if (!mounted) {
+        return;
+      }
+
+      ScaffoldMessenger.of(context)
+        ..hideCurrentSnackBar()
+        ..showSnackBar(
+          SnackBar(
+            content: Text(
+              widget.isBangla
+                  ? 'প্রোফাইলের পছন্দ সংরক্ষণ হয়েছে।'
+                  : 'Profile preferences have been saved.',
+            ),
+          ),
+        );
+    } catch (_) {
+      if (!mounted) {
+        return;
+      }
+
+      ScaffoldMessenger.of(context)
+        ..hideCurrentSnackBar()
+        ..showSnackBar(
+          SnackBar(
+            content: Text(
+              widget.isBangla
+                  ? 'প্রোফাইলের পছন্দ সংরক্ষণ করা যায়নি। আবার চেষ্টা করুন।'
+                  : 'Profile preferences could not be saved. Please try again.',
+            ),
+          ),
+        );
+    } finally {
+      if (mounted) {
+        setState(() {
+          _isSavingPreferences = false;
+        });
+      }
     }
   }
 
@@ -332,6 +408,8 @@ class _ProfileScreenState extends State<ProfileScreen>
                 activity: _activityText(),
                 sleep: _sleepText(),
                 budget: _budgetText(),
+                isSaving: _isSavingPreferences,
+                onEdit: _showProfilePreferencesEditor,
               ),
               const SizedBox(height: 14),
               Container(
@@ -363,6 +441,360 @@ class _ProfileScreenState extends State<ProfileScreen>
               ),
             ],
           ),
+        ),
+      ),
+    );
+  }
+}
+
+class _ProfilePreferencesEditorSheet extends StatefulWidget {
+  const _ProfilePreferencesEditorSheet({
+    required this.isBangla,
+    required this.initialPreferences,
+  });
+
+  final bool isBangla;
+  final StoredProfilePreferences initialPreferences;
+
+  @override
+  State<_ProfilePreferencesEditorSheet> createState() =>
+      _ProfilePreferencesEditorSheetState();
+}
+
+class _ProfilePreferencesEditorSheetState
+    extends State<_ProfilePreferencesEditorSheet> {
+  late String _goal;
+  late String _schedule;
+  late String _activity;
+  late String _sleep;
+  late String _budget;
+
+  @override
+  void initState() {
+    super.initState();
+
+    _goal = _normaliseGoal(widget.initialPreferences.goal);
+    _schedule = _normaliseSchedule(widget.initialPreferences.schedule);
+    _activity = _normaliseActivity(widget.initialPreferences.activity);
+    _sleep = _normaliseSleep(widget.initialPreferences.sleep);
+    _budget = _normaliseBudget(widget.initialPreferences.budget);
+  }
+
+  String _normaliseGoal(String value) {
+    final normalised = value.trim().toLowerCase();
+
+    if (normalised.contains('gain') ||
+        normalised.contains('বাড়') ||
+        normalised.contains('বাড়')) {
+      return 'gain_weight';
+    }
+    if (normalised.contains('loss') ||
+        normalised.contains('lose') ||
+        normalised.contains('কম')) {
+      return 'lose_weight';
+    }
+    if (normalised.contains('fitness') ||
+        normalised.contains('fit') ||
+        normalised.contains('ফিট')) {
+      return 'improve_fitness';
+    }
+    return 'maintain_weight';
+  }
+
+  String _normaliseSchedule(String value) {
+    switch (value.trim().toLowerCase()) {
+      case 'regular':
+        return 'regular';
+      case 'shift':
+      case 'shift_based':
+        return 'shift_based';
+      default:
+        return 'irregular';
+    }
+  }
+
+  String _normaliseActivity(String value) {
+    switch (value.trim().toLowerCase()) {
+      case 'moderate':
+      case 'medium':
+        return 'moderate';
+      case 'high':
+        return 'high';
+      default:
+        return 'low';
+    }
+  }
+
+  String _normaliseSleep(String value) {
+    switch (value.trim().toLowerCase()) {
+      case 'less_than_6':
+      case '6_to_7':
+      case '7_to_9':
+      case 'more_than_9':
+        return value.trim().toLowerCase();
+      default:
+        return '7_to_9';
+    }
+  }
+
+  String _normaliseBudget(String value) {
+    switch (value.trim().toLowerCase()) {
+      case 'moderate':
+      case 'medium':
+        return 'moderate';
+      case 'flexible':
+        return 'flexible';
+      case 'premium':
+      case 'high':
+        return 'premium';
+      default:
+        return 'budget_friendly';
+    }
+  }
+
+  String _goalLabel(String value) {
+    switch (value) {
+      case 'lose_weight':
+        return widget.isBangla ? 'ওজন কমানো' : 'Weight loss';
+      case 'gain_weight':
+        return widget.isBangla ? 'ওজন বাড়ানো' : 'Weight gain';
+      case 'improve_fitness':
+        return widget.isBangla ? 'ফিটনেস উন্নত করা' : 'Improve fitness';
+      default:
+        return widget.isBangla ? 'ওজন বজায় রাখা' : 'Maintain weight';
+    }
+  }
+
+  String _scheduleLabel(String value) {
+    switch (value) {
+      case 'regular':
+        return widget.isBangla ? 'নিয়মিত' : 'Regular';
+      case 'shift_based':
+        return widget.isBangla ? 'শিফটভিত্তিক' : 'Shift-based';
+      default:
+        return widget.isBangla ? 'অনিয়মিত' : 'Irregular';
+    }
+  }
+
+  String _activityLabel(String value) {
+    switch (value) {
+      case 'moderate':
+        return widget.isBangla ? 'মাঝারি' : 'Moderate';
+      case 'high':
+        return widget.isBangla ? 'বেশি' : 'High';
+      default:
+        return widget.isBangla ? 'কম' : 'Low';
+    }
+  }
+
+  String _sleepLabel(String value) {
+    switch (value) {
+      case 'less_than_6':
+        return widget.isBangla ? '৬ ঘণ্টার কম' : 'Less than 6 hours';
+      case '6_to_7':
+        return widget.isBangla ? '৬–৭ ঘণ্টা' : '6–7 hours';
+      case 'more_than_9':
+        return widget.isBangla ? '৯ ঘণ্টার বেশি' : 'More than 9 hours';
+      default:
+        return widget.isBangla ? '৭–৯ ঘণ্টা' : '7–9 hours';
+    }
+  }
+
+  String _budgetLabel(String value) {
+    switch (value) {
+      case 'moderate':
+        return widget.isBangla ? 'মাঝারি' : 'Moderate';
+      case 'flexible':
+        return widget.isBangla ? 'নমনীয়' : 'Flexible';
+      case 'premium':
+        return widget.isBangla ? 'উচ্চ বাজেট' : 'Higher budget';
+      default:
+        return widget.isBangla ? 'সাশ্রয়ী' : 'Budget-friendly';
+    }
+  }
+
+  void _submit() {
+    Navigator.of(context).pop(
+      StoredProfilePreferences(
+        goal: _goal,
+        schedule: _schedule,
+        activity: _activity,
+        sleep: _sleep,
+        budget: _budget,
+      ),
+    );
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    final theme = Theme.of(context);
+
+    return SafeArea(
+      child: SingleChildScrollView(
+        padding: EdgeInsets.fromLTRB(
+          16,
+          0,
+          16,
+          MediaQuery.viewInsetsOf(context).bottom + 20,
+        ),
+        child: Column(
+          mainAxisSize: MainAxisSize.min,
+          crossAxisAlignment: CrossAxisAlignment.stretch,
+          children: [
+            Text(
+              widget.isBangla
+                  ? 'স্বাস্থ্য লক্ষ্য ও জীবনযাপনের পছন্দ'
+                  : 'Health goal and lifestyle preferences',
+              style: theme.textTheme.titleLarge?.copyWith(
+                fontWeight: FontWeight.bold,
+              ),
+            ),
+            const SizedBox(height: 6),
+            Text(
+              widget.isBangla
+                  ? 'এই পরিবর্তনগুলো Profile এবং Today dashboard-এ ব্যবহার হবে।'
+                  : 'These changes will be used in Profile and the Today dashboard.',
+            ),
+            const SizedBox(height: 18),
+            DropdownButtonFormField<String>(
+              initialValue: _goal,
+              decoration: InputDecoration(
+                labelText: widget.isBangla ? 'স্বাস্থ্য লক্ষ্য' : 'Health goal',
+                border: const OutlineInputBorder(),
+              ),
+              items:
+                  const [
+                        'lose_weight',
+                        'gain_weight',
+                        'maintain_weight',
+                        'improve_fitness',
+                      ]
+                      .map((value) {
+                        return DropdownMenuItem(
+                          value: value,
+                          child: Text(_goalLabel(value)),
+                        );
+                      })
+                      .toList(growable: false),
+              onChanged: (value) {
+                if (value != null) {
+                  setState(() {
+                    _goal = value;
+                  });
+                }
+              },
+            ),
+            const SizedBox(height: 7),
+            Text(
+              widget.isBangla
+                  ? 'লক্ষ্য পরিবর্তন করলে dashboard guidance বদলাবে। বর্তমান calorie target আগের assessment অনুযায়ী থাকবে।'
+                  : 'Changing the goal updates dashboard guidance. The current calorie target remains based on the earlier assessment.',
+              style: theme.textTheme.bodySmall?.copyWith(
+                color: theme.colorScheme.onSurfaceVariant,
+              ),
+            ),
+            const SizedBox(height: 14),
+            DropdownButtonFormField<String>(
+              initialValue: _schedule,
+              decoration: InputDecoration(
+                labelText: widget.isBangla ? 'দৈনিক সময়সূচি' : 'Daily schedule',
+                border: const OutlineInputBorder(),
+              ),
+              items: const ['regular', 'irregular', 'shift_based']
+                  .map((value) {
+                    return DropdownMenuItem(
+                      value: value,
+                      child: Text(_scheduleLabel(value)),
+                    );
+                  })
+                  .toList(growable: false),
+              onChanged: (value) {
+                if (value != null) {
+                  setState(() {
+                    _schedule = value;
+                  });
+                }
+              },
+            ),
+            const SizedBox(height: 14),
+            DropdownButtonFormField<String>(
+              initialValue: _activity,
+              decoration: InputDecoration(
+                labelText: widget.isBangla ? 'কর্মচাঞ্চল্য' : 'Activity level',
+                border: const OutlineInputBorder(),
+              ),
+              items: const ['low', 'moderate', 'high']
+                  .map((value) {
+                    return DropdownMenuItem(
+                      value: value,
+                      child: Text(_activityLabel(value)),
+                    );
+                  })
+                  .toList(growable: false),
+              onChanged: (value) {
+                if (value != null) {
+                  setState(() {
+                    _activity = value;
+                  });
+                }
+              },
+            ),
+            const SizedBox(height: 14),
+            DropdownButtonFormField<String>(
+              initialValue: _sleep,
+              decoration: InputDecoration(
+                labelText: widget.isBangla ? 'ঘুম' : 'Sleep',
+                border: const OutlineInputBorder(),
+              ),
+              items: const ['less_than_6', '6_to_7', '7_to_9', 'more_than_9']
+                  .map((value) {
+                    return DropdownMenuItem(
+                      value: value,
+                      child: Text(_sleepLabel(value)),
+                    );
+                  })
+                  .toList(growable: false),
+              onChanged: (value) {
+                if (value != null) {
+                  setState(() {
+                    _sleep = value;
+                  });
+                }
+              },
+            ),
+            const SizedBox(height: 14),
+            DropdownButtonFormField<String>(
+              initialValue: _budget,
+              decoration: InputDecoration(
+                labelText: widget.isBangla ? 'খাবারের বাজেট' : 'Food budget',
+                border: const OutlineInputBorder(),
+              ),
+              items:
+                  const ['budget_friendly', 'moderate', 'flexible', 'premium']
+                      .map((value) {
+                        return DropdownMenuItem(
+                          value: value,
+                          child: Text(_budgetLabel(value)),
+                        );
+                      })
+                      .toList(growable: false),
+              onChanged: (value) {
+                if (value != null) {
+                  setState(() {
+                    _budget = value;
+                  });
+                }
+              },
+            ),
+            const SizedBox(height: 18),
+            FilledButton.icon(
+              onPressed: _submit,
+              icon: const Icon(Icons.save_outlined),
+              label: Text(
+                widget.isBangla ? 'পরিবর্তন সংরক্ষণ করুন' : 'Save changes',
+              ),
+            ),
+          ],
         ),
       ),
     );
@@ -532,6 +964,8 @@ class _ProfilePreferencesCard extends StatelessWidget {
     required this.activity,
     required this.sleep,
     required this.budget,
+    required this.isSaving,
+    required this.onEdit,
   });
 
   final bool isBangla;
@@ -539,6 +973,8 @@ class _ProfilePreferencesCard extends StatelessWidget {
   final String activity;
   final String sleep;
   final String budget;
+  final bool isSaving;
+  final VoidCallback onEdit;
 
   @override
   Widget build(BuildContext context) {
@@ -591,6 +1027,21 @@ class _ProfilePreferencesCard extends StatelessWidget {
               label: isBangla ? 'খাবারের বাজেট' : 'Food budget',
               value: budget,
               showDivider: false,
+            ),
+            const SizedBox(height: 16),
+            FilledButton.icon(
+              onPressed: isSaving ? null : onEdit,
+              icon: isSaving
+                  ? const SizedBox.square(
+                      dimension: 18,
+                      child: CircularProgressIndicator(strokeWidth: 2),
+                    )
+                  : const Icon(Icons.edit_outlined),
+              label: Text(
+                isBangla
+                    ? 'স্বাস্থ্য লক্ষ্য ও পছন্দ পরিবর্তন করুন'
+                    : 'Edit health goal and preferences',
+              ),
             ),
           ],
         ),
