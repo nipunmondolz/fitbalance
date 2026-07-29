@@ -2,6 +2,7 @@ import 'package:flutter/material.dart';
 
 import 'daily_log_screen.dart';
 import 'habit_engine_screen.dart';
+import 'learn_screen.dart';
 import 'progress_screen.dart';
 import 'profile_screen.dart';
 import 'today_dashboard_screen.dart';
@@ -75,14 +76,7 @@ class _DashboardNavigationScreenState extends State<DashboardNavigationScreen> {
         targetCaloriesMax: widget.targetCaloriesMax,
         refreshListenable: _progressRefreshNotifier,
       ),
-      _DashboardPlaceholderScreen(
-        icon: Icons.menu_book_outlined,
-        title: isBangla ? 'শিখুন' : 'Learn',
-        description: isBangla
-            ? 'স্বাস্থ্যকর খাবার, ব্যায়াম, ঘুম ও lifestyle সম্পর্কিত নির্ভরযোগ্য তথ্য এখানে থাকবে।'
-            : 'Reliable guidance about food, exercise, sleep, and lifestyle will appear here.',
-        isBangla: isBangla,
-      ),
+      LearnScreen(isBangla: isBangla),
       ProfileScreen(
         isBangla: isBangla,
         goal: widget.goal,
@@ -183,113 +177,6 @@ class _DashboardNavigationScreenState extends State<DashboardNavigationScreen> {
               label: isBangla ? 'প্রোফাইল' : 'Profile',
             ),
           ],
-        ),
-      ),
-    );
-  }
-}
-
-class _DashboardPlaceholderScreen extends StatelessWidget {
-  const _DashboardPlaceholderScreen({
-    required this.icon,
-    required this.title,
-    required this.description,
-    required this.isBangla,
-  });
-
-  final IconData icon;
-  final String title;
-  final String description;
-  final bool isBangla;
-
-  @override
-  Widget build(BuildContext context) {
-    final theme = Theme.of(context);
-    final colorScheme = theme.colorScheme;
-
-    return Scaffold(
-      appBar: AppBar(automaticallyImplyLeading: false, title: Text(title)),
-      body: SafeArea(
-        child: Center(
-          child: SingleChildScrollView(
-            padding: const EdgeInsets.all(24),
-            child: ConstrainedBox(
-              constraints: const BoxConstraints(maxWidth: 520),
-              child: Card(
-                margin: EdgeInsets.zero,
-                elevation: 0,
-                color: colorScheme.surfaceContainerLowest,
-                shape: RoundedRectangleBorder(
-                  borderRadius: BorderRadius.circular(20),
-                  side: BorderSide(color: colorScheme.outlineVariant),
-                ),
-                child: Padding(
-                  padding: const EdgeInsets.all(28),
-                  child: Column(
-                    children: [
-                      Container(
-                        width: 72,
-                        height: 72,
-                        decoration: BoxDecoration(
-                          color: colorScheme.primaryContainer,
-                          borderRadius: BorderRadius.circular(20),
-                        ),
-                        child: Icon(
-                          icon,
-                          size: 36,
-                          color: colorScheme.onPrimaryContainer,
-                        ),
-                      ),
-                      const SizedBox(height: 20),
-                      Text(
-                        title,
-                        textAlign: TextAlign.center,
-                        style: theme.textTheme.headlineSmall?.copyWith(
-                          fontWeight: FontWeight.bold,
-                        ),
-                      ),
-                      const SizedBox(height: 10),
-                      Text(
-                        description,
-                        textAlign: TextAlign.center,
-                        style: theme.textTheme.bodyLarge?.copyWith(
-                          color: colorScheme.onSurfaceVariant,
-                        ),
-                      ),
-                      const SizedBox(height: 22),
-                      Container(
-                        padding: const EdgeInsets.symmetric(
-                          horizontal: 14,
-                          vertical: 9,
-                        ),
-                        decoration: BoxDecoration(
-                          color: colorScheme.secondaryContainer,
-                          borderRadius: BorderRadius.circular(20),
-                        ),
-                        child: Text(
-                          isBangla ? 'Navigation প্রস্তুত' : 'Navigation ready',
-                          style: theme.textTheme.labelLarge?.copyWith(
-                            color: colorScheme.onSecondaryContainer,
-                            fontWeight: FontWeight.w600,
-                          ),
-                        ),
-                      ),
-                      const SizedBox(height: 12),
-                      Text(
-                        isBangla
-                            ? 'এই section-এর মূল feature পরবর্তী development ধাপে তৈরি হবে।'
-                            : 'The main features of this section will be built in a later development step.',
-                        textAlign: TextAlign.center,
-                        style: theme.textTheme.bodySmall?.copyWith(
-                          color: colorScheme.onSurfaceVariant,
-                        ),
-                      ),
-                    ],
-                  ),
-                ),
-              ),
-            ),
-          ),
         ),
       ),
     );
