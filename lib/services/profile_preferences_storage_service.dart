@@ -47,7 +47,12 @@ class ProfilePreferencesStorageService {
     'irregular',
     'shift_based',
   };
-  static const Set<String> _allowedActivities = {'low', 'moderate', 'high'};
+  static const Set<String> _allowedActivities = {
+    'low',
+    'light',
+    'moderate',
+    'high',
+  };
   static const Set<String> _allowedSleepValues = {
     'less_than_6',
     '6_to_7',
@@ -180,6 +185,8 @@ class ProfilePreferencesStorageService {
 
   String _normaliseActivity(String value) {
     switch (value.trim().toLowerCase()) {
+      case 'light':
+        return 'light';
       case 'moderate':
       case 'medium':
         return 'moderate';

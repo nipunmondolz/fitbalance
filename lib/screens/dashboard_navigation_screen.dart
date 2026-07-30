@@ -2,18 +2,27 @@ import 'dart:async';
 
 import 'package:flutter/material.dart';
 
+import '../services/assessment_profile_storage_service.dart';
+import '../services/body_metrics_storage_service.dart';
+import '../services/calorie_target_calculator.dart';
 import '../services/profile_preferences_storage_service.dart';
+import '../services/weight_storage_service.dart';
 
 import 'daily_log_screen.dart';
 import 'habit_engine_screen.dart';
 import 'learn_screen.dart';
-import 'progress_screen.dart';
 import 'profile_screen.dart';
+import 'progress_screen.dart';
+import 'reassessment_screen.dart';
 import 'today_dashboard_screen.dart';
 
 class DashboardNavigationScreen extends StatefulWidget {
   const DashboardNavigationScreen({
     required this.isBangla,
+    required this.age,
+    required this.gender,
+    required this.heightInCm,
+    required this.weightInKg,
     required this.goal,
     required this.targetCaloriesMin,
     required this.targetCaloriesMax,
@@ -25,6 +34,10 @@ class DashboardNavigationScreen extends StatefulWidget {
   });
 
   final bool isBangla;
+  final int age;
+  final String gender;
+  final double heightInCm;
+  final double weightInKg;
   final String goal;
   final int targetCaloriesMin;
   final int targetCaloriesMax;
@@ -40,6 +53,11 @@ class DashboardNavigationScreen extends StatefulWidget {
 
 class _DashboardNavigationScreenState extends State<DashboardNavigationScreen> {
   int _selectedIndex = 0;
+
+  late int _age;
+  late String _gender;
+  late int _targetCaloriesMin;
+  late int _targetCaloriesMax;
   late String _goal;
   late String _schedule;
   late String _activity;
@@ -54,6 +72,10 @@ class _DashboardNavigationScreenState extends State<DashboardNavigationScreen> {
   void initState() {
     super.initState();
 
+    _age = widget.age;
+    _gender = widget.gender;
+    _targetCaloriesMin = widget.targetCaloriesMin;
+    _targetCaloriesMax = widget.targetCaloriesMax;
     _goal = widget.goal;
     _schedule = widget.schedule;
     _activity = widget.activity;
@@ -64,7 +86,7 @@ class _DashboardNavigationScreenState extends State<DashboardNavigationScreen> {
     _progressRefreshNotifier = ValueNotifier<int>(0);
     _profileRefreshNotifier = ValueNotifier<int>(0);
 
-    unawaited(_loadSavedProfilePreferences());
+    unawaited(_initialiseSavedDashboardData());
   }
 
   StoredProfilePreferences get _currentPreferences {
@@ -77,10 +99,19 @@ class _DashboardNavigationScreenState extends State<DashboardNavigationScreen> {
     );
   }
 
-  Future<void> _loadSavedProfilePreferences() async {
+  Future<void> _initialiseSavedDashboardData() async {
     try {
-      final preferences = await ProfilePreferencesStorageService.instance
+      final preferencesFuture = ProfilePreferencesStorageService.instance
           .loadPreferences(fallback: _currentPreferences);
+      final assessmentFuture = AssessmentProfileStorageService.instance
+          .loadProfile();
+      final heightFuture = BodyMetricsStorageService.instance.loadHeightCm();
+      final weightEntriesFuture = WeightStorageService.instance.loadEntries();
+
+      final preferences = await preferencesFuture;
+      final savedAssessment = await assessmentFuture;
+      final savedHeight = await heightFuture;
+      final weightEntries = await weightEntriesFuture;
 
       if (!mounted) {
         return;
@@ -92,12 +123,48 @@ class _DashboardNavigationScreenState extends State<DashboardNavigationScreen> {
         _activity = preferences.activity;
         _sleep = preferences.sleep;
         _budget = preferences.budget;
+
+        if (savedAssessment != null) {
+          _age = savedAssessment.age;
+          _gender = savedAssessment.gender;
+          _targetCaloriesMin = savedAssessment.targetCaloriesMin;
+          _targetCaloriesMax = savedAssessment.targetCaloriesMax;
+        }
       });
 
+      if (savedAssessment == null) {
+        await AssessmentProfileStorageService.instance.saveProfile(
+          StoredAssessmentProfile(
+            age: _age,
+            gender: _gender,
+            targetCaloriesMin: _targetCaloriesMin,
+            targetCaloriesMax: _targetCaloriesMax,
+          ),
+        );
+
+        if (savedHeight == null) {
+          await BodyMetricsStorageService.instance.saveHeightCm(
+            widget.heightInCm,
+          );
+        }
+
+        if (weightEntries.isEmpty) {
+          await WeightStorageService.instance.saveWeightForDate(
+            date: DateTime.now(),
+            weightKg: widget.weightInKg,
+          );
+        }
+      }
+
+      if (!mounted) {
+        return;
+      }
+
       _todayRefreshNotifier.value++;
+      _progressRefreshNotifier.value++;
       _profileRefreshNotifier.value++;
     } catch (_) {
-      // Storage read ব্যর্থ হলে assessment থেকে পাওয়া visible values রাখা হবে।
+      // Storage initialization ব্যর্থ হলে constructor-এর visible data রাখা হবে।
     }
   }
 
@@ -122,6 +189,104 @@ class _DashboardNavigationScreenState extends State<DashboardNavigationScreen> {
 
     _todayRefreshNotifier.value++;
     _profileRefreshNotifier.value++;
+  }
+
+  Future<void> _saveReassessment(CalorieAssessmentResult result) async {
+    final updatedPreferences = StoredProfilePreferences(
+      goal: result.goal,
+      schedule: _schedule,
+      activity: result.activity,
+      sleep: _sleep,
+      budget: _budget,
+    );
+
+    await Future.wait<void>([
+      AssessmentProfileStorageService.instance.saveProfile(
+        StoredAssessmentProfile(
+          age: result.age,
+          gender: result.gender,
+          targetCaloriesMin: result.targetCaloriesMin,
+          targetCaloriesMax: result.targetCaloriesMax,
+        ),
+      ),
+      BodyMetricsStorageService.instance.saveHeightCm(result.heightCm),
+      WeightStorageService.instance
+          .saveWeightForDate(date: DateTime.now(), weightKg: result.weightKg)
+          .then<void>((_) {}),
+      ProfilePreferencesStorageService.instance.savePreferences(
+        updatedPreferences,
+      ),
+    ]);
+
+    if (!mounted) {
+      return;
+    }
+
+    setState(() {
+      _age = result.age;
+      _gender = result.gender;
+      _targetCaloriesMin = result.targetCaloriesMin;
+      _targetCaloriesMax = result.targetCaloriesMax;
+      _goal = result.goal;
+      _activity = result.activity;
+    });
+
+    _todayRefreshNotifier.value++;
+    _progressRefreshNotifier.value++;
+    _profileRefreshNotifier.value++;
+  }
+
+  Future<void> _openReassessment() async {
+    try {
+      final heightFuture = BodyMetricsStorageService.instance.loadHeightCm();
+      final weightEntriesFuture = WeightStorageService.instance.loadEntries();
+
+      final savedHeight = await heightFuture;
+      final weightEntries = await weightEntriesFuture;
+
+      if (!mounted) {
+        return;
+      }
+
+      final latestWeight = weightEntries.isEmpty
+          ? widget.weightInKg
+          : weightEntries.last.weightKg;
+
+      await Navigator.of(context).push<void>(
+        MaterialPageRoute<void>(
+          builder: (context) {
+            return ReassessmentScreen(
+              isBangla: widget.isBangla,
+              initialAge: _age,
+              initialGender: _gender,
+              initialHeightCm: savedHeight ?? widget.heightInCm,
+              initialWeightKg: latestWeight,
+              initialGoal: _goal,
+              initialActivity: _activity,
+              currentTargetCaloriesMin: _targetCaloriesMin,
+              currentTargetCaloriesMax: _targetCaloriesMax,
+              onSave: _saveReassessment,
+            );
+          },
+        ),
+      );
+    } catch (_) {
+      if (!mounted) {
+        return;
+      }
+
+      ScaffoldMessenger.of(context)
+        ..hideCurrentSnackBar()
+        ..showSnackBar(
+          SnackBar(
+            content: Text(
+              widget.isBangla
+                  ? 'পুনর্মূল্যায়নের তথ্য খোলা যায়নি। আবার চেষ্টা করুন।'
+                  : 'The reassessment data could not be opened. Please try again.',
+            ),
+          ),
+        );
+    }
   }
 
   void _selectPage(int index) {
@@ -164,8 +329,8 @@ class _DashboardNavigationScreenState extends State<DashboardNavigationScreen> {
       TodayDashboardScreen(
         isBangla: isBangla,
         goal: _goal,
-        targetCaloriesMin: widget.targetCaloriesMin,
-        targetCaloriesMax: widget.targetCaloriesMax,
+        targetCaloriesMin: _targetCaloriesMin,
+        targetCaloriesMax: _targetCaloriesMax,
         schedule: _schedule,
         activity: _activity,
         sleep: _sleep,
@@ -176,19 +341,23 @@ class _DashboardNavigationScreenState extends State<DashboardNavigationScreen> {
       ),
       DailyLogScreen(
         isBangla: isBangla,
-        targetCaloriesMin: widget.targetCaloriesMin,
-        targetCaloriesMax: widget.targetCaloriesMax,
+        targetCaloriesMin: _targetCaloriesMin,
+        targetCaloriesMax: _targetCaloriesMax,
       ),
       HabitEngineScreen(isBangla: isBangla),
       ProgressScreen(
         isBangla: isBangla,
-        targetCaloriesMin: widget.targetCaloriesMin,
-        targetCaloriesMax: widget.targetCaloriesMax,
+        targetCaloriesMin: _targetCaloriesMin,
+        targetCaloriesMax: _targetCaloriesMax,
         refreshListenable: _progressRefreshNotifier,
       ),
       LearnScreen(isBangla: isBangla),
       ProfileScreen(
         isBangla: isBangla,
+        age: _age,
+        gender: _gender,
+        targetCaloriesMin: _targetCaloriesMin,
+        targetCaloriesMax: _targetCaloriesMax,
         goal: _goal,
         schedule: _schedule,
         activity: _activity,
@@ -196,6 +365,7 @@ class _DashboardNavigationScreenState extends State<DashboardNavigationScreen> {
         budget: _budget,
         refreshListenable: _profileRefreshNotifier,
         onManageBodyInformation: () => _selectPage(3),
+        onOpenReassessment: () => unawaited(_openReassessment()),
         onSavePreferences: _saveProfilePreferences,
       ),
     ];

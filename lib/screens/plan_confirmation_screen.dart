@@ -5,6 +5,10 @@ import 'dashboard_navigation_screen.dart';
 class PlanConfirmationScreen extends StatelessWidget {
   const PlanConfirmationScreen({
     required this.isBangla,
+    required this.age,
+    required this.gender,
+    required this.heightInCm,
+    required this.weightInKg,
     required this.goal,
     required this.targetCaloriesMin,
     required this.targetCaloriesMax,
@@ -16,6 +20,10 @@ class PlanConfirmationScreen extends StatelessWidget {
   });
 
   final bool isBangla;
+  final int age;
+  final String gender;
+  final double heightInCm;
+  final double weightInKg;
   final String goal;
   final int targetCaloriesMin;
   final int targetCaloriesMax;
@@ -65,11 +73,11 @@ class PlanConfirmationScreen extends StatelessWidget {
     switch (_goalKind) {
       case 'loss':
         return isBangla
-            ? 'ধীরে ও টেকসইভাবে calorie deficit বজায় রাখা'
+            ? 'ধীরে ও টেকসইভাবে ক্যালরি ঘাটতি বজায় রাখা'
             : 'Maintain a gradual and sustainable calorie deficit';
       case 'gain':
         return isBangla
-            ? 'ধীরে ও নিয়ন্ত্রিতভাবে calorie surplus বজায় রাখা'
+            ? 'ধীরে ও নিয়ন্ত্রিতভাবে ক্যালরি উদ্বৃত্ত বজায় রাখা'
             : 'Maintain a gradual and controlled calorie surplus';
       case 'fitness':
         return isBangla
@@ -86,15 +94,15 @@ class PlanConfirmationScreen extends StatelessWidget {
     switch (schedule) {
       case 'regular':
         return isBangla
-            ? 'প্রতিদিন কাছাকাছি সময়ে ৩টি প্রধান খাবার এবং প্রয়োজন অনুযায়ী ১টি পরিকল্পিত snack রাখুন।'
+            ? 'প্রতিদিন কাছাকাছি সময়ে ৩টি প্রধান খাবার এবং প্রয়োজন অনুযায়ী ১টি পরিকল্পিত নাশতা রাখুন।'
             : 'Have 3 main meals at similar times each day, with 1 planned snack when needed.';
       case 'irregular':
         return isBangla
-            ? 'দিনের কাজ অনুযায়ী ৩টি flexible meal window ঠিক করুন এবং দীর্ঘ সময় না খেয়ে থাকা এড়িয়ে চলুন।'
+            ? 'দিনের কাজ অনুযায়ী ৩টি নমনীয় খাবারের সময় ঠিক করুন এবং দীর্ঘ সময় না খেয়ে থাকা এড়িয়ে চলুন।'
             : 'Set 3 flexible meal windows around your day and avoid long gaps without food.';
       default:
         return isBangla
-            ? 'কাজের shift অনুযায়ী আগে থেকেই meal window ও বহনযোগ্য খাবার পরিকল্পনা করুন।'
+            ? 'কাজের শিফট অনুযায়ী আগে থেকেই খাবারের সময় ও বহনযোগ্য খাবার পরিকল্পনা করুন।'
             : 'Plan meal windows and portable foods around your work shifts.';
     }
   }
@@ -103,15 +111,15 @@ class PlanConfirmationScreen extends StatelessWidget {
     switch (activity) {
       case 'light':
         return isBangla
-            ? 'সপ্তাহে ৩–৪ দিন প্রায় ৩০ মিনিট হাঁটা বা ব্যায়াম করুন এবং ধীরে intensity বাড়ান।'
+            ? 'সপ্তাহে ৩–৪ দিন প্রায় ৩০ মিনিট হাঁটা বা ব্যায়াম করুন এবং ধীরে মাত্রা বাড়ান।'
             : 'Aim for about 30 minutes of activity on 3–4 days a week and increase gradually.';
       case 'moderate':
         return isBangla
-            ? 'সপ্তাহে ৪–৫ দিন নিয়মিত activity বজায় রাখুন এবং পর্যাপ্ত recovery দিন রাখুন।'
+            ? 'সপ্তাহে ৪–৫ দিন নিয়মিত শারীরিক সক্রিয়তা বজায় রাখুন এবং পর্যাপ্ত বিশ্রামের দিন রাখুন।'
             : 'Maintain activity on 4–5 days a week with adequate recovery days.';
       case 'high':
         return isBangla
-            ? 'বর্তমান activity বজায় রেখে training, nutrition এবং recovery-এর মধ্যে ভারসাম্য রাখুন।'
+            ? 'বর্তমান শারীরিক সক্রিয়তা বজায় রেখে প্রশিক্ষণ, পুষ্টি ও বিশ্রামের মধ্যে ভারসাম্য রাখুন।'
             : 'Maintain your activity while balancing training, nutrition, and recovery.';
       default:
         return isBangla
@@ -128,15 +136,15 @@ class PlanConfirmationScreen extends StatelessWidget {
             : 'Gradually increase sleep toward a consistent 7–9 hours.';
       case '6_to_7':
         return isBangla
-            ? 'নিয়মিত bedtime রেখে সম্ভব হলে ঘুম ৭–৯ ঘণ্টার কাছাকাছি নিন।'
+            ? 'নিয়মিত ঘুমানোর সময় রেখে সম্ভব হলে ৭–৯ ঘণ্টা ঘুমান।'
             : 'Keep a regular bedtime and move closer to 7–9 hours when possible.';
       case '7_to_9':
         return isBangla
-            ? 'বর্তমান ঘুমের সময় ও নিয়মিত sleep schedule বজায় রাখুন।'
+            ? 'বর্তমান ঘুমের সময় ও নিয়মিত ঘুমের সময়সূচি বজায় রাখুন।'
             : 'Maintain your current sleep duration and regular schedule.';
       default:
         return isBangla
-            ? 'নিয়মিত sleep schedule রাখুন এবং ঘুমের পর শরীরের সতেজতা পর্যবেক্ষণ করুন।'
+            ? 'নিয়মিত ঘুমের সময়সূচি রাখুন এবং ঘুমের পর শরীরের সতেজতা পর্যবেক্ষণ করুন।'
             : 'Keep a regular sleep schedule and monitor how refreshed you feel.';
     }
   }
@@ -149,11 +157,11 @@ class PlanConfirmationScreen extends StatelessWidget {
             : 'Prioritize lentils, eggs, chickpeas, seasonal vegetables, rice, and accessible local foods.';
       case 'moderate':
         return isBangla
-            ? 'স্থানীয় খাবারের সঙ্গে মাছ, মুরগি, দুধ বা দইয়ের মতো protein source পরিকল্পনায় রাখুন।'
+            ? 'স্থানীয় খাবারের সঙ্গে মাছ, মুরগি, দুধ বা দইয়ের মতো আমিষের উৎস পরিকল্পনায় রাখুন।'
             : 'Combine local foods with protein sources such as fish, chicken, milk, or yogurt.';
       default:
         return isBangla
-            ? 'বিভিন্ন ধরনের whole food বেছে নিন এবং portion ও খাবারের ভারসাম্য বজায় রাখুন।'
+            ? 'বিভিন্ন ধরনের কম প্রক্রিয়াজাত খাবার বেছে নিন এবং পরিমাণ ও খাবারের ভারসাম্য বজায় রাখুন।'
             : 'Choose a variety of whole foods while maintaining balanced portions.';
     }
   }
@@ -162,7 +170,7 @@ class PlanConfirmationScreen extends StatelessWidget {
     switch (_goalKind) {
       case 'loss':
         return isBangla
-            ? 'একই সময়ে সপ্তাহে ১–২ বার ওজন নথিভুক্ত করুন এবং দৈনিক পরিবর্তনের বদলে কয়েক সপ্তাহের trend দেখুন।'
+            ? 'একই সময়ে সপ্তাহে ১–২ বার ওজন নথিভুক্ত করুন এবং দৈনিক পরিবর্তনের বদলে কয়েক সপ্তাহের ধারা দেখুন।'
             : 'Record weight 1–2 times a week under similar conditions and follow the multi-week trend.';
       case 'gain':
         return isBangla
@@ -170,7 +178,7 @@ class PlanConfirmationScreen extends StatelessWidget {
             : 'Review weekly weight, strength, and meal consistency to assess gradual progress.';
       default:
         return isBangla
-            ? 'সাপ্তাহিক ওজন, activity, ঘুম এবং habit consistency পর্যালোচনা করুন।'
+            ? 'সাপ্তাহিক ওজন, শারীরিক সক্রিয়তা, ঘুম ও অভ্যাসের ধারাবাহিকতা পর্যালোচনা করুন।'
             : 'Review weight, activity, sleep, and habit consistency each week.';
     }
   }
@@ -180,6 +188,10 @@ class PlanConfirmationScreen extends StatelessWidget {
       MaterialPageRoute<void>(
         builder: (context) => DashboardNavigationScreen(
           isBangla: isBangla,
+          age: age,
+          gender: gender,
+          heightInCm: heightInCm,
+          weightInKg: weightInKg,
           goal: goal,
           targetCaloriesMin: targetCaloriesMin,
           targetCaloriesMax: targetCaloriesMax,
@@ -264,7 +276,7 @@ class PlanConfirmationScreen extends StatelessWidget {
                         children: [
                           Text(
                             isBangla
-                                ? 'প্রস্তাবিত দৈনিক calorie target'
+                                ? 'প্রস্তাবিত দৈনিক ক্যালরি লক্ষ্য'
                                 : 'Suggested daily calorie target',
                             style: Theme.of(context).textTheme.titleMedium
                                 ?.copyWith(
@@ -308,7 +320,7 @@ class PlanConfirmationScreen extends StatelessWidget {
               const SizedBox(height: 12),
               _PlanItem(
                 icon: Icons.bedtime_outlined,
-                title: isBangla ? 'ঘুম ও recovery' : 'Sleep and recovery',
+                title: isBangla ? 'ঘুম ও বিশ্রাম' : 'Sleep and recovery',
                 description: _sleepPlan(),
               ),
               const SizedBox(height: 12),
@@ -341,7 +353,7 @@ class PlanConfirmationScreen extends StatelessWidget {
                     Expanded(
                       child: Text(
                         isBangla
-                            ? 'এটি আপনার দেওয়া তথ্যের ভিত্তিতে তৈরি একটি প্রাথমিক পরিকল্পনা। এটি medical prescription নয় এবং অগ্রগতি অনুযায়ী পরে পরিবর্তন করা যাবে।'
+                            ? 'এটি আপনার দেওয়া তথ্যের ভিত্তিতে তৈরি একটি প্রাথমিক পরিকল্পনা। এটি চিকিৎসা নির্দেশনা নয় এবং অগ্রগতি অনুযায়ী পরে পরিবর্তন করা যাবে।'
                             : 'This is an initial plan based on your information. It is not a medical prescription and can be adjusted as you progress.',
                         style: Theme.of(context).textTheme.bodyMedium?.copyWith(
                           color: colorScheme.onSurfaceVariant,

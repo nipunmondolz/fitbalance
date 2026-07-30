@@ -1,6 +1,6 @@
-import 'dart:math' as math;
-
 import 'package:flutter/material.dart';
+
+import '../services/calorie_target_calculator.dart';
 
 import 'plan_confirmation_screen.dart';
 
@@ -30,86 +30,38 @@ class AssessmentResultScreen extends StatelessWidget {
   final String sleep;
   final String budget;
 
-  double get _heightInMeters => heightInCm / 100;
-
-  double get _bmi {
-    return weightInKg / (_heightInMeters * _heightInMeters);
+  CalorieAssessmentResult get _calculation {
+    return CalorieTargetCalculator.calculate(
+      age: age,
+      gender: gender,
+      heightCm: heightInCm,
+      weightKg: weightInKg,
+      goal: goal,
+      activity: activity,
+    );
   }
 
-  bool get _usesFemaleFormula {
-    final value = gender.trim().toLowerCase();
+  double get _bmi => _calculation.bmi;
 
-    return value == 'female' ||
-        value == 'woman' ||
-        value == 'নারী' ||
-        value == 'মহিলা';
-  }
+  double get _bmr => _calculation.bmr;
 
-  double get _bmr {
-    final adjustment = _usesFemaleFormula ? -161.0 : 5.0;
+  double get _tdee => _calculation.tdee;
 
-    return (10 * weightInKg) + (6.25 * heightInCm) - (5 * age) + adjustment;
-  }
-
-  double get _activityMultiplier {
-    switch (activity) {
-      case 'light':
-        return 1.375;
-      case 'moderate':
-        return 1.55;
-      case 'high':
-        return 1.725;
-      default:
-        return 1.2;
-    }
-  }
-
-  double get _tdee => _bmr * _activityMultiplier;
-
-  String get _goalKind {
-    final value = goal.trim().toLowerCase();
-
-    if (value.contains('gain') ||
-        value.contains('বাড়') ||
-        value.contains('বাড়')) {
-      return 'gain';
-    }
-
-    if (value.contains('loss') ||
-        value.contains('lose') ||
-        value.contains('কম')) {
-      return 'loss';
-    }
-
-    if (value.contains('fitness') ||
-        value.contains('fit') ||
-        value.contains('ফিট')) {
-      return 'fitness';
-    }
-
-    return 'maintain';
-  }
+  String get _goalKind => _calculation.goalKind;
 
   List<double> get _healthyWeightRange {
-    final heightSquared = _heightInMeters * _heightInMeters;
+    final calculation = _calculation;
 
-    return [18.5 * heightSquared, 24.9 * heightSquared];
+    return [calculation.healthyWeightMinKg, calculation.healthyWeightMaxKg];
   }
 
   List<double> get _targetCalorieRange {
-    switch (_goalKind) {
-      case 'loss':
-        final minimum = math.max(1200.0, _tdee - 500.0).toDouble();
-        final maximum = math.max(minimum, _tdee - 250.0).toDouble();
+    final calculation = _calculation;
 
-        return [minimum, maximum];
-
-      case 'gain':
-        return [_tdee + 300.0, _tdee + 500.0];
-
-      default:
-        return [_tdee - 100.0, _tdee + 100.0];
-    }
+    return [
+      calculation.targetCaloriesMin.toDouble(),
+      calculation.targetCaloriesMax.toDouble(),
+    ];
   }
 
   String _bmiStatus() {
@@ -137,7 +89,7 @@ class AssessmentResultScreen extends StatelessWidget {
 
     if (_bmi < 25) {
       return isBangla
-          ? 'বর্তমান ওজন স্বাস্থ্যকর adult screening সীমার মধ্যে।'
+          ? 'বর্তমান ওজন প্রাপ্তবয়স্কদের স্বাস্থ্যকর প্রাথমিক যাচাইয়ের সীমার মধ্যে।'
           : 'Your weight is within the healthy adult screening range.';
     }
 
@@ -163,17 +115,17 @@ class AssessmentResultScreen extends StatelessWidget {
     switch (_goalKind) {
       case 'loss':
         return isBangla
-            ? 'Maintenance estimate থেকে প্রতিদিন প্রায় ২৫০–৫০০ kcal কম ধরে এই range তৈরি হয়েছে।'
+            ? 'ওজন বজায় রাখার হিসাব থেকে প্রতিদিন প্রায় ২৫০–৫০০ kcal কম ধরে এই সীমা তৈরি হয়েছে।'
             : 'This range is about 250–500 kcal below the maintenance estimate.';
 
       case 'gain':
         return isBangla
-            ? 'Maintenance estimate-এর সঙ্গে প্রতিদিন প্রায় ৩০০–৫০০ kcal যোগ করে এই range তৈরি হয়েছে।'
+            ? 'ওজন বজায় রাখার হিসাবের সঙ্গে প্রতিদিন প্রায় ৩০০–৫০০ kcal যোগ করে এই সীমা তৈরি হয়েছে।'
             : 'This range is about 300–500 kcal above the maintenance estimate.';
 
       default:
         return isBangla
-            ? 'বর্তমান ওজন ও শক্তি বজায় রাখার জন্য maintenance estimate-এর কাছাকাছি range।'
+            ? 'বর্তমান ওজন ও শক্তি বজায় রাখার জন্য আনুমানিক প্রয়োজনের কাছাকাছি সীমা।'
             : 'A range close to maintenance for supporting current weight and energy.';
     }
   }
@@ -241,6 +193,10 @@ class AssessmentResultScreen extends StatelessWidget {
       MaterialPageRoute<void>(
         builder: (context) => PlanConfirmationScreen(
           isBangla: isBangla,
+          age: age,
+          gender: gender,
+          heightInCm: heightInCm,
+          weightInKg: weightInKg,
           goal: goal,
           targetCaloriesMin: targetRange[0].round(),
           targetCaloriesMax: targetRange[1].round(),
@@ -317,33 +273,33 @@ class AssessmentResultScreen extends StatelessWidget {
               _ResultCard(
                 icon: Icons.straighten,
                 title: isBangla
-                    ? 'স্বাস্থ্যকর ওজনের screening range'
+                    ? 'স্বাস্থ্যকর ওজনের প্রাথমিক যাচাইয়ের সীমা'
                     : 'Healthy weight screening range',
                 value:
                     '${healthyRange[0].toStringAsFixed(1)}–'
                     '${healthyRange[1].toStringAsFixed(1)} kg',
                 description: isBangla
-                    ? 'BMI ১৮.৫–২৪.৯ অনুসারে আনুমানিক range'
+                    ? 'BMI ১৮.৫–২৪.৯ অনুসারে আনুমানিক সীমা'
                     : 'Estimated range based on BMI 18.5–24.9',
               ),
               const SizedBox(height: 14),
               _ResultCard(
                 icon: Icons.local_fire_department_outlined,
                 title: isBangla
-                    ? 'দৈনিক maintenance estimate'
+                    ? 'ওজন বজায় রাখতে দৈনিক আনুমানিক প্রয়োজন'
                     : 'Daily maintenance estimate',
                 value:
                     '${(_tdee - 100).round()}–'
                     '${(_tdee + 100).round()} kcal',
                 description: isBangla
-                    ? 'বর্তমান ওজন বজায় রাখার আনুমানিক দৈনিক energy range'
+                    ? 'বর্তমান ওজন বজায় রাখার আনুমানিক দৈনিক শক্তির সীমা'
                     : 'Estimated daily energy range for maintaining current weight',
               ),
               const SizedBox(height: 14),
               _ResultCard(
                 icon: Icons.flag_outlined,
                 title: isBangla
-                    ? 'আপনার লক্ষ্য অনুযায়ী calorie range'
+                    ? 'আপনার লক্ষ্য অনুযায়ী ক্যালরি সীমা'
                     : 'Goal-based calorie range',
                 value:
                     '${targetRange[0].round()}–'
@@ -416,7 +372,7 @@ class AssessmentResultScreen extends StatelessWidget {
                     Expanded(
                       child: Text(
                         isBangla
-                            ? 'এই ফলাফল ১৮+ বয়সী প্রাপ্তবয়স্কদের জন্য একটি সাধারণ estimate। এটি medical diagnosis নয়। গর্ভাবস্থা, স্তন্যদান, রোগ বা নিয়মিত ওষুধ থাকলে চিকিৎসকের পরামর্শ প্রয়োজন।'
+                            ? 'এই ফলাফল ১৮+ বয়সী প্রাপ্তবয়স্কদের জন্য একটি সাধারণ আনুমানিক হিসাব। এটি রোগনির্ণয় নয়। গর্ভাবস্থা, স্তন্যদান, রোগ বা নিয়মিত ওষুধ থাকলে চিকিৎসকের পরামর্শ প্রয়োজন।'
                             : 'This is a general estimate for adults aged 18+. It is not a medical diagnosis. Seek professional guidance during pregnancy, breastfeeding, illness, or regular medication use.',
                         style: Theme.of(context).textTheme.bodyMedium?.copyWith(
                           color: colorScheme.onSecondaryContainer,

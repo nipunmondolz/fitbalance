@@ -10,6 +10,10 @@ import '../services/weight_storage_service.dart';
 class ProfileScreen extends StatefulWidget {
   const ProfileScreen({
     required this.isBangla,
+    required this.age,
+    required this.gender,
+    required this.targetCaloriesMin,
+    required this.targetCaloriesMax,
     required this.goal,
     required this.schedule,
     required this.activity,
@@ -17,11 +21,16 @@ class ProfileScreen extends StatefulWidget {
     required this.budget,
     required this.refreshListenable,
     required this.onManageBodyInformation,
+    required this.onOpenReassessment,
     required this.onSavePreferences,
     super.key,
   });
 
   final bool isBangla;
+  final int age;
+  final String gender;
+  final int targetCaloriesMin;
+  final int targetCaloriesMax;
   final String goal;
   final String schedule;
   final String activity;
@@ -29,6 +38,7 @@ class ProfileScreen extends StatefulWidget {
   final String budget;
   final ValueListenable<int> refreshListenable;
   final VoidCallback onManageBodyInformation;
+  final VoidCallback onOpenReassessment;
   final Future<void> Function(StoredProfilePreferences preferences)
   onSavePreferences;
 
@@ -257,8 +267,13 @@ class _ProfileScreenState extends State<ProfileScreen>
   String _activityText() {
     switch (widget.activity.trim().toLowerCase()) {
       case 'low':
+        return widget.isBangla
+            ? 'খুব কম বা কোনো ব্যায়াম নেই'
+            : 'Little or no exercise';
       case 'light':
-        return widget.isBangla ? 'কম' : 'Low';
+        return widget.isBangla
+            ? 'সপ্তাহে ১–২ দিন ব্যায়াম'
+            : 'Exercise 1–2 days a week';
       case 'moderate':
       case 'medium':
         return widget.isBangla ? 'মাঝারি' : 'Moderate';
@@ -302,6 +317,23 @@ class _ProfileScreenState extends State<ProfileScreen>
     }
   }
 
+  String _genderText() {
+    switch (widget.gender.trim().toLowerCase()) {
+      case 'female':
+      case 'woman':
+      case 'নারী':
+      case 'মহিলা':
+        return widget.isBangla ? 'নারী' : 'Female';
+      case 'other':
+      case 'অন্যান্য':
+        return widget.isBangla ? 'অন্যান্য' : 'Other';
+      case 'prefer_not_to_say':
+        return widget.isBangla ? 'বলতে অনিচ্ছুক' : 'Prefer not to say';
+      default:
+        return widget.isBangla ? 'পুরুষ' : 'Male';
+    }
+  }
+
   String _heightText() {
     final heightCm = _heightCm;
 
@@ -329,11 +361,11 @@ class _ProfileScreenState extends State<ProfileScreen>
       case _ProfileBmiCategory.underweight:
         return widget.isBangla ? 'কম ওজন' : 'Underweight';
       case _ProfileBmiCategory.healthy:
-        return widget.isBangla ? 'স্বাস্থ্যকর range' : 'Healthy range';
+        return widget.isBangla ? 'স্বাস্থ্যকর সীমা' : 'Healthy range';
       case _ProfileBmiCategory.overweight:
         return widget.isBangla ? 'অতিরিক্ত ওজন' : 'Overweight';
       case _ProfileBmiCategory.obesity:
-        return widget.isBangla ? 'স্থূলতার range' : 'Obesity range';
+        return widget.isBangla ? 'স্থূলতার সীমা' : 'Obesity range';
       case null:
         return widget.isBangla ? 'হিসাব হয়নি' : 'Not calculated';
     }
@@ -392,6 +424,15 @@ class _ProfileScreenState extends State<ProfileScreen>
               const SizedBox(height: 18),
               _ProfileGoalCard(isBangla: widget.isBangla, goal: _goalText()),
               const SizedBox(height: 14),
+              _ProfileAssessmentCard(
+                isBangla: widget.isBangla,
+                age: widget.age,
+                gender: _genderText(),
+                targetCaloriesMin: widget.targetCaloriesMin,
+                targetCaloriesMax: widget.targetCaloriesMax,
+                onReassess: widget.onOpenReassessment,
+              ),
+              const SizedBox(height: 14),
               _ProfileBodyCard(
                 isBangla: widget.isBangla,
                 latestWeight: _weightText(_latestWeight?.weightKg),
@@ -429,7 +470,7 @@ class _ProfileScreenState extends State<ProfileScreen>
                     Expanded(
                       child: Text(
                         widget.isBangla
-                            ? 'ওজন, লক্ষ্য ওজন বা উচ্চতা পরিবর্তন করলে Progress tab এবং এই Profile summary স্বয়ংক্রিয়ভাবে আপডেট হবে।'
+                            ? 'ওজন, লক্ষ্য ওজন বা উচ্চতা পরিবর্তন করলে অগ্রগতি ট্যাব এবং এই প্রোফাইল সারাংশ স্বয়ংক্রিয়ভাবে হালনাগাদ হবে।'
                             : 'Changes to weight, target weight, or height update both the Progress tab and this profile summary.',
                         style: theme.textTheme.bodyMedium?.copyWith(
                           color: colorScheme.onSecondaryContainer,
@@ -515,6 +556,8 @@ class _ProfilePreferencesEditorSheetState
 
   String _normaliseActivity(String value) {
     switch (value.trim().toLowerCase()) {
+      case 'light':
+        return 'light';
       case 'moderate':
       case 'medium':
         return 'moderate';
@@ -578,12 +621,18 @@ class _ProfilePreferencesEditorSheetState
 
   String _activityLabel(String value) {
     switch (value) {
+      case 'light':
+        return widget.isBangla
+            ? 'সপ্তাহে ১–২ দিন ব্যায়াম'
+            : 'Exercise 1–2 days a week';
       case 'moderate':
         return widget.isBangla ? 'মাঝারি' : 'Moderate';
       case 'high':
         return widget.isBangla ? 'বেশি' : 'High';
       default:
-        return widget.isBangla ? 'কম' : 'Low';
+        return widget.isBangla
+            ? 'খুব কম বা কোনো ব্যায়াম নেই'
+            : 'Little or no exercise';
     }
   }
 
@@ -652,7 +701,7 @@ class _ProfilePreferencesEditorSheetState
             const SizedBox(height: 6),
             Text(
               widget.isBangla
-                  ? 'এই পরিবর্তনগুলো Profile এবং Today dashboard-এ ব্যবহার হবে।'
+                  ? 'এই পরিবর্তনগুলো প্রোফাইল এবং আজকের ড্যাশবোর্ডে ব্যবহার হবে।'
                   : 'These changes will be used in Profile and the Today dashboard.',
             ),
             const SizedBox(height: 18),
@@ -687,8 +736,8 @@ class _ProfilePreferencesEditorSheetState
             const SizedBox(height: 7),
             Text(
               widget.isBangla
-                  ? 'লক্ষ্য পরিবর্তন করলে dashboard guidance বদলাবে। বর্তমান calorie target আগের assessment অনুযায়ী থাকবে।'
-                  : 'Changing the goal updates dashboard guidance. The current calorie target remains based on the earlier assessment.',
+                  ? 'এখানে লক্ষ্য বা শারীরিক সক্রিয়তা পরিবর্তন করলে নির্দেশনা বদলাবে। ক্যালরি লক্ষ্য পুনরায় হিসাব করতে উপরের পুনর্মূল্যায়ন ব্যবহার করুন।'
+                  : 'Changing the goal or activity here updates guidance. Use reassessment above to recalculate the calorie target.',
               style: theme.textTheme.bodySmall?.copyWith(
                 color: theme.colorScheme.onSurfaceVariant,
               ),
@@ -723,7 +772,7 @@ class _ProfilePreferencesEditorSheetState
                 labelText: widget.isBangla ? 'কর্মচাঞ্চল্য' : 'Activity level',
                 border: const OutlineInputBorder(),
               ),
-              items: const ['low', 'moderate', 'high']
+              items: const ['low', 'light', 'moderate', 'high']
                   .map((value) {
                     return DropdownMenuItem(
                       value: value,
@@ -857,6 +906,87 @@ class _ProfileGoalCard extends StatelessWidget {
                     ),
                   ),
                 ],
+              ),
+            ),
+          ],
+        ),
+      ),
+    );
+  }
+}
+
+class _ProfileAssessmentCard extends StatelessWidget {
+  const _ProfileAssessmentCard({
+    required this.isBangla,
+    required this.age,
+    required this.gender,
+    required this.targetCaloriesMin,
+    required this.targetCaloriesMax,
+    required this.onReassess,
+  });
+
+  final bool isBangla;
+  final int age;
+  final String gender;
+  final int targetCaloriesMin;
+  final int targetCaloriesMax;
+  final VoidCallback onReassess;
+
+  @override
+  Widget build(BuildContext context) {
+    final theme = Theme.of(context);
+    final colorScheme = theme.colorScheme;
+
+    return Card(
+      margin: EdgeInsets.zero,
+      elevation: 0,
+      color: colorScheme.surfaceContainerLowest,
+      shape: RoundedRectangleBorder(
+        borderRadius: BorderRadius.circular(18),
+        side: BorderSide(color: colorScheme.outlineVariant),
+      ),
+      child: Padding(
+        padding: const EdgeInsets.all(18),
+        child: Column(
+          crossAxisAlignment: CrossAxisAlignment.stretch,
+          children: [
+            Row(
+              children: [
+                Icon(Icons.assignment_ind_outlined, color: colorScheme.primary),
+                const SizedBox(width: 10),
+                Text(
+                  isBangla ? 'মূল্যায়নের তথ্য' : 'Assessment information',
+                  style: theme.textTheme.titleMedium?.copyWith(
+                    fontWeight: FontWeight.w600,
+                  ),
+                ),
+              ],
+            ),
+            const SizedBox(height: 16),
+            _ProfileInfoRow(
+              icon: Icons.cake_outlined,
+              label: isBangla ? 'বয়স' : 'Age',
+              value: isBangla ? '$age বছর' : '$age years',
+            ),
+            _ProfileInfoRow(
+              icon: Icons.people_outline,
+              label: isBangla ? 'লিঙ্গ' : 'Sex',
+              value: gender,
+            ),
+            _ProfileInfoRow(
+              icon: Icons.local_fire_department_outlined,
+              label: isBangla ? 'দৈনিক ক্যালরি লক্ষ্য' : 'Daily calorie target',
+              value: '$targetCaloriesMin–$targetCaloriesMax kcal',
+              showDivider: false,
+            ),
+            const SizedBox(height: 16),
+            FilledButton.icon(
+              onPressed: onReassess,
+              icon: const Icon(Icons.calculate_outlined),
+              label: Text(
+                isBangla
+                    ? 'পুনর্মূল্যায়ন ও ক্যালরি লক্ষ্য হালনাগাদ'
+                    : 'Reassess and update calorie target',
               ),
             ),
           ],
