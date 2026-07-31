@@ -56,6 +56,7 @@ class DashboardNavigationScreen extends StatefulWidget {
 class _DashboardNavigationScreenState extends State<DashboardNavigationScreen> {
   int _selectedIndex = 0;
 
+  late bool _isBangla;
   late int _age;
   late String _gender;
   late int _targetCaloriesMin;
@@ -74,6 +75,7 @@ class _DashboardNavigationScreenState extends State<DashboardNavigationScreen> {
   void initState() {
     super.initState();
 
+    _isBangla = widget.isBangla;
     _age = widget.age;
     _gender = widget.gender;
     _targetCaloriesMin = widget.targetCaloriesMin;
@@ -102,6 +104,7 @@ class _DashboardNavigationScreenState extends State<DashboardNavigationScreen> {
   }
 
   Future<void> _saveOnboardingSnapshot({
+    bool? isBangla,
     int? age,
     String? gender,
     double? heightInCm,
@@ -127,7 +130,7 @@ class _DashboardNavigationScreenState extends State<DashboardNavigationScreen> {
 
     await OnboardingStorageService.instance.saveSession(
       StoredOnboardingSession(
-        isBangla: widget.isBangla,
+        isBangla: isBangla ?? _isBangla,
         age: age ?? _age,
         gender: gender ?? _gender,
         heightInCm: resolvedHeight ?? widget.heightInCm,
@@ -217,6 +220,22 @@ class _DashboardNavigationScreenState extends State<DashboardNavigationScreen> {
     } catch (_) {
       // Storage initialization ব্যর্থ হলে constructor-এর visible data রাখা হবে।
     }
+  }
+
+  Future<void> _saveLanguage(bool isBangla) async {
+    if (isBangla == _isBangla) {
+      return;
+    }
+
+    await _saveOnboardingSnapshot(isBangla: isBangla);
+
+    if (!mounted) {
+      return;
+    }
+
+    setState(() {
+      _isBangla = isBangla;
+    });
   }
 
   Future<void> _saveProfilePreferences(
@@ -324,7 +343,7 @@ class _DashboardNavigationScreenState extends State<DashboardNavigationScreen> {
         MaterialPageRoute<void>(
           builder: (context) {
             return ReassessmentScreen(
-              isBangla: widget.isBangla,
+              isBangla: _isBangla,
               initialAge: _age,
               initialGender: _gender,
               initialHeightCm: savedHeight ?? widget.heightInCm,
@@ -348,7 +367,7 @@ class _DashboardNavigationScreenState extends State<DashboardNavigationScreen> {
         ..showSnackBar(
           SnackBar(
             content: Text(
-              widget.isBangla
+              _isBangla
                   ? 'পুনর্মূল্যায়নের তথ্য খোলা যায়নি। আবার চেষ্টা করুন।'
                   : 'The reassessment data could not be opened. Please try again.',
             ),
@@ -361,7 +380,7 @@ class _DashboardNavigationScreenState extends State<DashboardNavigationScreen> {
     await Navigator.of(context).push<void>(
       MaterialPageRoute<void>(
         builder: (context) {
-          return WelcomeScreen(initialIsBangla: widget.isBangla);
+          return WelcomeScreen(initialIsBangla: _isBangla);
         },
       ),
     );
@@ -401,7 +420,7 @@ class _DashboardNavigationScreenState extends State<DashboardNavigationScreen> {
   }
 
   List<Widget> _buildPages() {
-    final isBangla = widget.isBangla;
+    final isBangla = _isBangla;
 
     return <Widget>[
       TodayDashboardScreen(
@@ -445,6 +464,7 @@ class _DashboardNavigationScreenState extends State<DashboardNavigationScreen> {
         onManageBodyInformation: () => _selectPage(3),
         onOpenReassessment: () => unawaited(_openReassessment()),
         onRestartAssessment: () => unawaited(_openFullAssessment()),
+        onChangeLanguage: _saveLanguage,
         onSavePreferences: _saveProfilePreferences,
       ),
     ];
@@ -452,7 +472,7 @@ class _DashboardNavigationScreenState extends State<DashboardNavigationScreen> {
 
   @override
   Widget build(BuildContext context) {
-    final isBangla = widget.isBangla;
+    final isBangla = _isBangla;
     final pages = _buildPages();
 
     return PopScope<void>(

@@ -156,11 +156,6 @@ class _StartupLoadingView extends StatelessWidget {
                   height: 26,
                   child: CircularProgressIndicator(strokeWidth: 3),
                 ),
-                const SizedBox(height: 12),
-                Text(
-                  'তথ্য প্রস্তুত হচ্ছে…',
-                  style: Theme.of(context).textTheme.bodyMedium,
-                ),
               ],
             ),
           ),

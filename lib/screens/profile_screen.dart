@@ -23,6 +23,7 @@ class ProfileScreen extends StatefulWidget {
     required this.onManageBodyInformation,
     required this.onOpenReassessment,
     required this.onRestartAssessment,
+    required this.onChangeLanguage,
     required this.onSavePreferences,
     super.key,
   });
@@ -41,6 +42,7 @@ class ProfileScreen extends StatefulWidget {
   final VoidCallback onManageBodyInformation;
   final VoidCallback onOpenReassessment;
   final VoidCallback onRestartAssessment;
+  final Future<void> Function(bool isBangla) onChangeLanguage;
   final Future<void> Function(StoredProfilePreferences preferences)
   onSavePreferences;
 
@@ -57,6 +59,7 @@ class _ProfileScreenState extends State<ProfileScreen>
   double? _heightCm;
   bool _isLoading = true;
   bool _isSavingPreferences = false;
+  bool _isSavingLanguage = false;
   int _loadGeneration = 0;
 
   StoredWeightEntry? get _latestWeight =>
@@ -223,6 +226,58 @@ class _ProfileScreenState extends State<ProfileScreen>
       if (mounted) {
         setState(() {
           _isSavingPreferences = false;
+        });
+      }
+    }
+  }
+
+  Future<void> _changeLanguage(bool isBangla) async {
+    if (_isSavingLanguage || isBangla == widget.isBangla) {
+      return;
+    }
+
+    setState(() {
+      _isSavingLanguage = true;
+    });
+
+    try {
+      await widget.onChangeLanguage(isBangla);
+
+      if (!mounted) {
+        return;
+      }
+
+      ScaffoldMessenger.of(context)
+        ..hideCurrentSnackBar()
+        ..showSnackBar(
+          SnackBar(
+            content: Text(
+              isBangla
+                  ? 'অ্যাপের ভাষা বাংলা করা হয়েছে।'
+                  : 'The app language has been changed to English.',
+            ),
+          ),
+        );
+    } catch (_) {
+      if (!mounted) {
+        return;
+      }
+
+      ScaffoldMessenger.of(context)
+        ..hideCurrentSnackBar()
+        ..showSnackBar(
+          SnackBar(
+            content: Text(
+              widget.isBangla
+                  ? 'ভাষা পরিবর্তন করা যায়নি। আবার চেষ্টা করুন।'
+                  : 'The language could not be changed. Please try again.',
+            ),
+          ),
+        );
+    } finally {
+      if (mounted) {
+        setState(() {
+          _isSavingLanguage = false;
         });
       }
     }
@@ -488,6 +543,12 @@ class _ProfileScreenState extends State<ProfileScreen>
                 budget: _budgetText(),
                 isSaving: _isSavingPreferences,
                 onEdit: _showProfilePreferencesEditor,
+              ),
+              const SizedBox(height: 14),
+              _ProfileAppSettingsCard(
+                isBangla: widget.isBangla,
+                isSavingLanguage: _isSavingLanguage,
+                onLanguageChanged: _changeLanguage,
               ),
               const SizedBox(height: 14),
               Container(
@@ -1220,6 +1281,113 @@ class _ProfilePreferencesCard extends StatelessWidget {
                 isBangla
                     ? 'স্বাস্থ্য লক্ষ্য ও পছন্দ পরিবর্তন করুন'
                     : 'Edit health goal and preferences',
+              ),
+            ),
+          ],
+        ),
+      ),
+    );
+  }
+}
+
+class _ProfileAppSettingsCard extends StatelessWidget {
+  const _ProfileAppSettingsCard({
+    required this.isBangla,
+    required this.isSavingLanguage,
+    required this.onLanguageChanged,
+  });
+
+  final bool isBangla;
+  final bool isSavingLanguage;
+  final Future<void> Function(bool isBangla) onLanguageChanged;
+
+  @override
+  Widget build(BuildContext context) {
+    final theme = Theme.of(context);
+    final colorScheme = theme.colorScheme;
+
+    return Card(
+      margin: EdgeInsets.zero,
+      elevation: 0,
+      color: colorScheme.surfaceContainerLowest,
+      shape: RoundedRectangleBorder(
+        borderRadius: BorderRadius.circular(18),
+        side: BorderSide(color: colorScheme.outlineVariant),
+      ),
+      child: Padding(
+        padding: const EdgeInsets.all(18),
+        child: Column(
+          crossAxisAlignment: CrossAxisAlignment.stretch,
+          children: [
+            Row(
+              children: [
+                Icon(Icons.settings_outlined, color: colorScheme.primary),
+                const SizedBox(width: 10),
+                Text(
+                  isBangla ? 'অ্যাপ সেটিংস' : 'App settings',
+                  style: theme.textTheme.titleMedium?.copyWith(
+                    fontWeight: FontWeight.w600,
+                  ),
+                ),
+              ],
+            ),
+            const SizedBox(height: 8),
+            Text(
+              isBangla
+                  ? 'আপনার পছন্দের ভাষা নির্বাচন করুন। পরিবর্তনটি সঙ্গে সঙ্গে পুরো অ্যাপে কার্যকর হবে।'
+                  : 'Choose your preferred language. The change is applied across the app immediately.',
+              style: theme.textTheme.bodyMedium?.copyWith(
+                color: colorScheme.onSurfaceVariant,
+              ),
+            ),
+            const SizedBox(height: 16),
+            Row(
+              children: [
+                Icon(Icons.language_outlined, color: colorScheme.primary),
+                const SizedBox(width: 10),
+                Expanded(
+                  child: Text(
+                    isBangla ? 'অ্যাপের ভাষা' : 'App language',
+                    style: theme.textTheme.bodyLarge?.copyWith(
+                      fontWeight: FontWeight.w600,
+                    ),
+                  ),
+                ),
+                if (isSavingLanguage)
+                  const SizedBox.square(
+                    dimension: 20,
+                    child: CircularProgressIndicator(strokeWidth: 2),
+                  ),
+              ],
+            ),
+            const SizedBox(height: 12),
+            SegmentedButton<bool>(
+              segments: const <ButtonSegment<bool>>[
+                ButtonSegment<bool>(
+                  value: true,
+                  icon: Icon(Icons.translate),
+                  label: Text('বাংলা'),
+                ),
+                ButtonSegment<bool>(
+                  value: false,
+                  icon: Icon(Icons.language),
+                  label: Text('English'),
+                ),
+              ],
+              selected: <bool>{isBangla},
+              onSelectionChanged: isSavingLanguage
+                  ? null
+                  : (selection) {
+                      unawaited(onLanguageChanged(selection.first));
+                    },
+            ),
+            const SizedBox(height: 10),
+            Text(
+              isBangla
+                  ? 'নির্বাচিত ভাষা সংরক্ষিত থাকবে এবং অ্যাপ আবার চালু করলেও একই ভাষা থাকবে।'
+                  : 'Your selected language is saved and restored when the app is opened again.',
+              style: theme.textTheme.bodySmall?.copyWith(
+                color: colorScheme.onSurfaceVariant,
               ),
             ),
           ],
