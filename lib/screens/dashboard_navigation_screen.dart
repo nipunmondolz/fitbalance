@@ -5,6 +5,7 @@ import 'package:flutter/material.dart';
 import '../services/assessment_profile_storage_service.dart';
 import '../services/body_metrics_storage_service.dart';
 import '../services/calorie_target_calculator.dart';
+import '../services/onboarding_storage_service.dart';
 import '../services/profile_preferences_storage_service.dart';
 import '../services/weight_storage_service.dart';
 
@@ -15,6 +16,7 @@ import 'profile_screen.dart';
 import 'progress_screen.dart';
 import 'reassessment_screen.dart';
 import 'today_dashboard_screen.dart';
+import 'welcome_screen.dart';
 
 class DashboardNavigationScreen extends StatefulWidget {
   const DashboardNavigationScreen({
@@ -99,6 +101,48 @@ class _DashboardNavigationScreenState extends State<DashboardNavigationScreen> {
     );
   }
 
+  Future<void> _saveOnboardingSnapshot({
+    int? age,
+    String? gender,
+    double? heightInCm,
+    double? weightInKg,
+    String? goal,
+    int? targetCaloriesMin,
+    int? targetCaloriesMax,
+    String? schedule,
+    String? activity,
+    String? sleep,
+    String? budget,
+  }) async {
+    final resolvedHeight =
+        heightInCm ?? await BodyMetricsStorageService.instance.loadHeightCm();
+    final weightEntries = weightInKg == null
+        ? await WeightStorageService.instance.loadEntries()
+        : const <StoredWeightEntry>[];
+    final resolvedWeight =
+        weightInKg ??
+        (weightEntries.isEmpty
+            ? widget.weightInKg
+            : weightEntries.last.weightKg);
+
+    await OnboardingStorageService.instance.saveSession(
+      StoredOnboardingSession(
+        isBangla: widget.isBangla,
+        age: age ?? _age,
+        gender: gender ?? _gender,
+        heightInCm: resolvedHeight ?? widget.heightInCm,
+        weightInKg: resolvedWeight,
+        goal: goal ?? _goal,
+        targetCaloriesMin: targetCaloriesMin ?? _targetCaloriesMin,
+        targetCaloriesMax: targetCaloriesMax ?? _targetCaloriesMax,
+        schedule: schedule ?? _schedule,
+        activity: activity ?? _activity,
+        sleep: sleep ?? _sleep,
+        budget: budget ?? _budget,
+      ),
+    );
+  }
+
   Future<void> _initialiseSavedDashboardData() async {
     try {
       final preferencesFuture = ProfilePreferencesStorageService.instance
@@ -156,6 +200,13 @@ class _DashboardNavigationScreenState extends State<DashboardNavigationScreen> {
         }
       }
 
+      await _saveOnboardingSnapshot(
+        heightInCm: savedHeight ?? widget.heightInCm,
+        weightInKg: weightEntries.isEmpty
+            ? widget.weightInKg
+            : weightEntries.last.weightKg,
+      );
+
       if (!mounted) {
         return;
       }
@@ -173,6 +224,13 @@ class _DashboardNavigationScreenState extends State<DashboardNavigationScreen> {
   ) async {
     await ProfilePreferencesStorageService.instance.savePreferences(
       preferences,
+    );
+    await _saveOnboardingSnapshot(
+      goal: preferences.goal,
+      schedule: preferences.schedule,
+      activity: preferences.activity,
+      sleep: preferences.sleep,
+      budget: preferences.budget,
     );
 
     if (!mounted) {
@@ -215,6 +273,16 @@ class _DashboardNavigationScreenState extends State<DashboardNavigationScreen> {
           .then<void>((_) {}),
       ProfilePreferencesStorageService.instance.savePreferences(
         updatedPreferences,
+      ),
+      _saveOnboardingSnapshot(
+        age: result.age,
+        gender: result.gender,
+        heightInCm: result.heightCm,
+        weightInKg: result.weightKg,
+        goal: result.goal,
+        targetCaloriesMin: result.targetCaloriesMin,
+        targetCaloriesMax: result.targetCaloriesMax,
+        activity: result.activity,
       ),
     ]);
 
@@ -287,6 +355,16 @@ class _DashboardNavigationScreenState extends State<DashboardNavigationScreen> {
           ),
         );
     }
+  }
+
+  Future<void> _openFullAssessment() async {
+    await Navigator.of(context).push<void>(
+      MaterialPageRoute<void>(
+        builder: (context) {
+          return WelcomeScreen(initialIsBangla: widget.isBangla);
+        },
+      ),
+    );
   }
 
   void _selectPage(int index) {
@@ -366,6 +444,7 @@ class _DashboardNavigationScreenState extends State<DashboardNavigationScreen> {
         refreshListenable: _profileRefreshNotifier,
         onManageBodyInformation: () => _selectPage(3),
         onOpenReassessment: () => unawaited(_openReassessment()),
+        onRestartAssessment: () => unawaited(_openFullAssessment()),
         onSavePreferences: _saveProfilePreferences,
       ),
     ];

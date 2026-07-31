@@ -1,17 +1,26 @@
 import 'package:flutter/material.dart';
+
 import 'consent_screen.dart';
 
 class WelcomeScreen extends StatefulWidget {
-  const WelcomeScreen({super.key});
+  const WelcomeScreen({this.initialIsBangla = true, super.key});
+
+  final bool initialIsBangla;
 
   @override
   State<WelcomeScreen> createState() => _WelcomeScreenState();
 }
 
 class _WelcomeScreenState extends State<WelcomeScreen> {
-  String _selectedLanguage = 'bn';
+  late String _selectedLanguage;
 
   bool get _isBangla => _selectedLanguage == 'bn';
+
+  @override
+  void initState() {
+    super.initState();
+    _selectedLanguage = widget.initialIsBangla ? 'bn' : 'en';
+  }
 
   @override
   Widget build(BuildContext context) {

@@ -71,50 +71,57 @@ class ProfilePreferencesStorageService {
   Future<StoredProfilePreferences> loadPreferences({
     required StoredProfilePreferences fallback,
   }) async {
+    return await loadSavedPreferences() ?? _normalise(fallback);
+  }
+
+  Future<StoredProfilePreferences?> loadSavedPreferences() async {
     final savedJson = await _preferences.getString(_preferencesKey);
 
     if (savedJson == null || savedJson.isEmpty) {
-      return _normalise(fallback);
+      return null;
     }
 
     try {
       final decoded = jsonDecode(savedJson);
 
       if (decoded is! Map) {
-        return _normalise(fallback);
+        return null;
       }
 
       final values = Map<String, Object?>.from(decoded);
+      final goal = values['goal'];
+      final schedule = values['schedule'];
+      final activity = values['activity'];
+      final sleep = values['sleep'];
+      final budget = values['budget'];
 
-      return StoredProfilePreferences(
-        goal: _validatedValue(
-          values['goal'],
-          _allowedGoals,
-          _normaliseGoal(fallback.goal),
-        ),
-        schedule: _validatedValue(
-          values['schedule'],
-          _allowedSchedules,
-          _normaliseSchedule(fallback.schedule),
-        ),
-        activity: _validatedValue(
-          values['activity'],
-          _allowedActivities,
-          _normaliseActivity(fallback.activity),
-        ),
-        sleep: _validatedValue(
-          values['sleep'],
-          _allowedSleepValues,
-          _normaliseSleep(fallback.sleep),
-        ),
-        budget: _validatedValue(
-          values['budget'],
-          _allowedBudgets,
-          _normaliseBudget(fallback.budget),
-        ),
+      if (goal is! String ||
+          schedule is! String ||
+          activity is! String ||
+          sleep is! String ||
+          budget is! String) {
+        return null;
+      }
+
+      final normalised = StoredProfilePreferences(
+        goal: _normaliseGoal(goal),
+        schedule: _normaliseSchedule(schedule),
+        activity: _normaliseActivity(activity),
+        sleep: _normaliseSleep(sleep),
+        budget: _normaliseBudget(budget),
       );
+
+      if (!_allowedGoals.contains(normalised.goal) ||
+          !_allowedSchedules.contains(normalised.schedule) ||
+          !_allowedActivities.contains(normalised.activity) ||
+          !_allowedSleepValues.contains(normalised.sleep) ||
+          !_allowedBudgets.contains(normalised.budget)) {
+        return null;
+      }
+
+      return normalised;
     } on FormatException {
-      return _normalise(fallback);
+      return null;
     }
   }
 
@@ -135,18 +142,6 @@ class ProfilePreferencesStorageService {
       sleep: _normaliseSleep(preferences.sleep),
       budget: _normaliseBudget(preferences.budget),
     );
-  }
-
-  String _validatedValue(
-    Object? value,
-    Set<String> allowedValues,
-    String fallback,
-  ) {
-    if (value is String && allowedValues.contains(value)) {
-      return value;
-    }
-
-    return fallback;
   }
 
   String _normaliseGoal(String value) {

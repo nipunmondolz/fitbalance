@@ -1,5 +1,11 @@
 import 'package:flutter/material.dart';
 
+import '../services/assessment_profile_storage_service.dart';
+import '../services/body_metrics_storage_service.dart';
+import '../services/onboarding_storage_service.dart';
+import '../services/profile_preferences_storage_service.dart';
+import '../services/weight_storage_service.dart';
+
 import 'dashboard_navigation_screen.dart';
 
 class PlanConfirmationScreen extends StatelessWidget {
@@ -183,7 +189,70 @@ class PlanConfirmationScreen extends StatelessWidget {
     }
   }
 
-  void _confirm(BuildContext context) {
+  Future<void> _confirm(BuildContext context) async {
+    try {
+      final preferences = StoredProfilePreferences(
+        goal: goal,
+        schedule: schedule,
+        activity: activity,
+        sleep: sleep,
+        budget: budget,
+      );
+
+      await Future.wait<void>([
+        OnboardingStorageService.instance.saveSession(
+          StoredOnboardingSession(
+            isBangla: isBangla,
+            age: age,
+            gender: gender,
+            heightInCm: heightInCm,
+            weightInKg: weightInKg,
+            goal: goal,
+            targetCaloriesMin: targetCaloriesMin,
+            targetCaloriesMax: targetCaloriesMax,
+            schedule: schedule,
+            activity: activity,
+            sleep: sleep,
+            budget: budget,
+          ),
+        ),
+        AssessmentProfileStorageService.instance.saveProfile(
+          StoredAssessmentProfile(
+            age: age,
+            gender: gender,
+            targetCaloriesMin: targetCaloriesMin,
+            targetCaloriesMax: targetCaloriesMax,
+          ),
+        ),
+        BodyMetricsStorageService.instance.saveHeightCm(heightInCm),
+        WeightStorageService.instance
+            .saveWeightForDate(date: DateTime.now(), weightKg: weightInKg)
+            .then<void>((_) {}),
+        ProfilePreferencesStorageService.instance.savePreferences(preferences),
+      ]);
+    } catch (_) {
+      if (!context.mounted) {
+        return;
+      }
+
+      ScaffoldMessenger.of(context)
+        ..hideCurrentSnackBar()
+        ..showSnackBar(
+          SnackBar(
+            content: Text(
+              isBangla
+                  ? 'পরিকল্পনাটি সংরক্ষণ করা যায়নি। আবার চেষ্টা করুন।'
+                  : 'The plan could not be saved. Please try again.',
+            ),
+          ),
+        );
+      return;
+    }
+
+    if (!context.mounted) {
+      return;
+    }
+
     Navigator.of(context).pushAndRemoveUntil(
       MaterialPageRoute<void>(
         builder: (context) => DashboardNavigationScreen(
@@ -367,7 +436,9 @@ class PlanConfirmationScreen extends StatelessWidget {
               SizedBox(
                 height: 52,
                 child: FilledButton(
-                  onPressed: () => _confirm(context),
+                  onPressed: () async {
+                    await _confirm(context);
+                  },
                   child: Text(
                     isBangla ? 'পরিকল্পনা নিশ্চিত করুন' : 'Confirm plan',
                     style: const TextStyle(

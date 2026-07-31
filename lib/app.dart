@@ -1,6 +1,6 @@
 import 'package:flutter/material.dart';
 
-import 'screens/welcome_screen.dart';
+import 'screens/app_startup_screen.dart';
 
 class FitBalanceApp extends StatelessWidget {
   const FitBalanceApp({super.key});
@@ -14,7 +14,7 @@ class FitBalanceApp extends StatelessWidget {
         colorScheme: ColorScheme.fromSeed(seedColor: Colors.green),
         useMaterial3: true,
       ),
-      home: const WelcomeScreen(),
+      home: const AppStartupScreen(),
     );
   }
 }

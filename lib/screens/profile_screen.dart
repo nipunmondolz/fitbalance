@@ -22,6 +22,7 @@ class ProfileScreen extends StatefulWidget {
     required this.refreshListenable,
     required this.onManageBodyInformation,
     required this.onOpenReassessment,
+    required this.onRestartAssessment,
     required this.onSavePreferences,
     super.key,
   });
@@ -39,6 +40,7 @@ class ProfileScreen extends StatefulWidget {
   final ValueListenable<int> refreshListenable;
   final VoidCallback onManageBodyInformation;
   final VoidCallback onOpenReassessment;
+  final VoidCallback onRestartAssessment;
   final Future<void> Function(StoredProfilePreferences preferences)
   onSavePreferences;
 
@@ -223,6 +225,40 @@ class _ProfileScreenState extends State<ProfileScreen>
           _isSavingPreferences = false;
         });
       }
+    }
+  }
+
+  Future<void> _confirmRestartAssessment() async {
+    final shouldRestart = await showDialog<bool>(
+      context: context,
+      builder: (dialogContext) {
+        return AlertDialog(
+          title: Text(
+            widget.isBangla
+                ? 'সম্পূর্ণ মূল্যায়ন আবার করবেন?'
+                : 'Start the full assessment again?',
+          ),
+          content: Text(
+            widget.isBangla
+                ? 'বর্তমান সংরক্ষিত প্রোফাইল এখনই মুছে যাবে না। নতুন মূল্যায়ন সম্পন্ন করে পরিকল্পনা নিশ্চিত করার পরেই নতুন তথ্য সংরক্ষিত হবে। মাঝপথে ফিরে এলে আগের তথ্য ঠিক থাকবে।'
+                : 'Your saved profile will not be deleted now. New information is saved only after you complete the assessment and confirm the new plan. Leaving midway keeps the previous profile.',
+          ),
+          actions: [
+            TextButton(
+              onPressed: () => Navigator.pop(dialogContext, false),
+              child: Text(widget.isBangla ? 'বাতিল' : 'Cancel'),
+            ),
+            FilledButton(
+              onPressed: () => Navigator.pop(dialogContext, true),
+              child: Text(widget.isBangla ? 'আবার শুরু করুন' : 'Start again'),
+            ),
+          ],
+        );
+      },
+    );
+
+    if (shouldRestart == true && mounted) {
+      widget.onRestartAssessment();
     }
   }
 
@@ -431,6 +467,7 @@ class _ProfileScreenState extends State<ProfileScreen>
                 targetCaloriesMin: widget.targetCaloriesMin,
                 targetCaloriesMax: widget.targetCaloriesMax,
                 onReassess: widget.onOpenReassessment,
+                onRestartAssessment: _confirmRestartAssessment,
               ),
               const SizedBox(height: 14),
               _ProfileBodyCard(
@@ -923,6 +960,7 @@ class _ProfileAssessmentCard extends StatelessWidget {
     required this.targetCaloriesMin,
     required this.targetCaloriesMax,
     required this.onReassess,
+    required this.onRestartAssessment,
   });
 
   final bool isBangla;
@@ -931,6 +969,7 @@ class _ProfileAssessmentCard extends StatelessWidget {
   final int targetCaloriesMin;
   final int targetCaloriesMax;
   final VoidCallback onReassess;
+  final VoidCallback onRestartAssessment;
 
   @override
   Widget build(BuildContext context) {
@@ -987,6 +1026,16 @@ class _ProfileAssessmentCard extends StatelessWidget {
                 isBangla
                     ? 'পুনর্মূল্যায়ন ও ক্যালরি লক্ষ্য হালনাগাদ'
                     : 'Reassess and update calorie target',
+              ),
+            ),
+            const SizedBox(height: 10),
+            OutlinedButton.icon(
+              onPressed: onRestartAssessment,
+              icon: const Icon(Icons.restart_alt),
+              label: Text(
+                isBangla
+                    ? 'সম্পূর্ণ মূল্যায়ন আবার করুন'
+                    : 'Start the full assessment again',
               ),
             ),
           ],
