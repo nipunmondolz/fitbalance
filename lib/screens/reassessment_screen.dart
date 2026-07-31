@@ -1,6 +1,8 @@
 import 'package:flutter/material.dart';
 
+import '../services/app_settings_storage_service.dart';
 import '../services/calorie_target_calculator.dart';
+import '../services/measurement_unit_converter.dart';
 
 enum _ReassessmentHeightUnit { metric, imperial }
 
@@ -46,19 +48,28 @@ class _ReassessmentScreenState extends State<ReassessmentScreen> {
   late String _gender;
   late String _goal;
   late String _activity;
-  _ReassessmentHeightUnit _heightUnit = _ReassessmentHeightUnit.metric;
+  late MeasurementUnitMode _measurementUnit;
+  late _ReassessmentHeightUnit _heightUnit;
   bool _isSaving = false;
 
   @override
   void initState() {
     super.initState();
 
+    _measurementUnit = AppSettingsController.instance.currentMeasurementUnit;
+    _heightUnit = _measurementUnit == MeasurementUnitMode.imperial
+        ? _ReassessmentHeightUnit.imperial
+        : _ReassessmentHeightUnit.metric;
+
     _ageController = TextEditingController(text: '${widget.initialAge}');
     _heightCmController = TextEditingController(
       text: widget.initialHeightCm.toStringAsFixed(1),
     );
     _weightController = TextEditingController(
-      text: widget.initialWeightKg.toStringAsFixed(1),
+      text: MeasurementUnitConverter.displayWeightFromKilograms(
+        widget.initialWeightKg,
+        _measurementUnit,
+      ).toStringAsFixed(1),
     );
 
     final totalInches = (widget.initialHeightCm / 2.54).round();
@@ -250,11 +261,20 @@ class _ReassessmentScreenState extends State<ReassessmentScreen> {
 
   String? _validateWeight(String? value) {
     final weight = double.tryParse(_normaliseNumber(value ?? ''));
+    final minimum = MeasurementUnitConverter.minimumWeightInput(
+      25,
+      _measurementUnit,
+    );
+    final maximum = MeasurementUnitConverter.maximumWeightInput(
+      350,
+      _measurementUnit,
+    );
+    final unit = MeasurementUnitConverter.weightUnit(_measurementUnit);
 
-    if (weight == null || weight < 25 || weight > 350) {
+    if (weight == null || weight < minimum || weight > maximum) {
       return widget.isBangla
-          ? '২৫ থেকে ৩৫০ কেজির মধ্যে সঠিক ওজন লিখুন।'
-          : 'Enter a valid weight between 25 and 350 kg.';
+          ? '${minimum.toStringAsFixed(1)} থেকে ${maximum.toStringAsFixed(1)} $unit-এর মধ্যে সঠিক ওজন লিখুন।'
+          : 'Enter a valid weight between ${minimum.toStringAsFixed(1)} and ${maximum.toStringAsFixed(1)} $unit.';
     }
 
     return null;
@@ -308,7 +328,11 @@ class _ReassessmentScreenState extends State<ReassessmentScreen> {
     }
 
     final age = int.parse(_normaliseNumber(_ageController.text));
-    final weightKg = double.parse(_normaliseNumber(_weightController.text));
+    final inputWeight = double.parse(_normaliseNumber(_weightController.text));
+    final weightKg = MeasurementUnitConverter.inputWeightToKilograms(
+      inputWeight,
+      _measurementUnit,
+    );
 
     return CalorieTargetCalculator.calculate(
       age: age,
@@ -584,7 +608,9 @@ class _ReassessmentScreenState extends State<ReassessmentScreen> {
                 validator: _validateWeight,
                 decoration: InputDecoration(
                   labelText: widget.isBangla ? 'বর্তমান ওজন' : 'Current weight',
-                  suffixText: 'kg',
+                  suffixText: MeasurementUnitConverter.weightUnit(
+                    _measurementUnit,
+                  ),
                   prefixIcon: const Icon(Icons.monitor_weight_outlined),
                   border: const OutlineInputBorder(),
                 ),

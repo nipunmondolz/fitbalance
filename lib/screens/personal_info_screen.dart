@@ -1,4 +1,7 @@
 import 'package:flutter/material.dart';
+
+import '../services/app_settings_storage_service.dart';
+import '../services/measurement_unit_converter.dart';
 import 'goal_selection_screen.dart';
 
 class PersonalInfoScreen extends StatefulWidget {
@@ -20,7 +23,18 @@ class _PersonalInfoScreenState extends State<PersonalInfoScreen> {
   final _weightController = TextEditingController();
 
   String? _selectedGender;
-  String _heightUnit = 'feet_inches';
+  late MeasurementUnitMode _measurementUnit;
+  late String _heightUnit;
+
+  @override
+  void initState() {
+    super.initState();
+
+    _measurementUnit = AppSettingsController.instance.currentMeasurementUnit;
+    _heightUnit = _measurementUnit == MeasurementUnitMode.imperial
+        ? 'feet_inches'
+        : 'centimeters';
+  }
 
   @override
   void dispose() {
@@ -36,7 +50,7 @@ class _PersonalInfoScreenState extends State<PersonalInfoScreen> {
     const banglaDigits = '০১২৩৪৫৬৭৮৯';
     const englishDigits = '0123456789';
 
-    var normalized = value.trim();
+    var normalized = value.trim().replaceAll(',', '.');
 
     for (var i = 0; i < banglaDigits.length; i++) {
       normalized = normalized.replaceAll(banglaDigits[i], englishDigits[i]);
@@ -163,15 +177,20 @@ class _PersonalInfoScreenState extends State<PersonalInfoScreen> {
     }
 
     final weight = double.tryParse(_normalizeNumber(value));
+    final minimum = MeasurementUnitConverter.minimumWeightInput(
+      25,
+      _measurementUnit,
+    );
+    final maximum = MeasurementUnitConverter.maximumWeightInput(
+      350,
+      _measurementUnit,
+    );
+    final unit = MeasurementUnitConverter.weightUnit(_measurementUnit);
 
-    if (weight == null) {
-      return isBangla ? 'সঠিক সংখ্যায় ওজন লিখুন' : 'Enter a valid weight';
-    }
-
-    if (weight < 25 || weight > 350) {
+    if (weight == null || weight < minimum || weight > maximum) {
       return isBangla
-          ? 'ওজন ২৫ থেকে ৩৫০ কেজির মধ্যে লিখুন'
-          : 'Enter a weight between 25 and 350 kg';
+          ? 'ওজন ${minimum.toStringAsFixed(1)} থেকে ${maximum.toStringAsFixed(1)} $unit-এর মধ্যে লিখুন'
+          : 'Enter a weight between ${minimum.toStringAsFixed(1)} and ${maximum.toStringAsFixed(1)} $unit';
     }
 
     return null;
@@ -214,7 +233,11 @@ class _PersonalInfoScreenState extends State<PersonalInfoScreen> {
 
     final age = int.parse(_normalizeNumber(_ageController.text));
 
-    final weightInKg = double.parse(_normalizeNumber(_weightController.text));
+    final inputWeight = double.parse(_normalizeNumber(_weightController.text));
+    final weightInKg = MeasurementUnitConverter.inputWeightToKilograms(
+      inputWeight,
+      _measurementUnit,
+    );
 
     Navigator.of(context).push(
       MaterialPageRoute<void>(
@@ -406,9 +429,13 @@ class _PersonalInfoScreenState extends State<PersonalInfoScreen> {
                   textInputAction: TextInputAction.done,
                   decoration: InputDecoration(
                     labelText: isBangla ? 'বর্তমান ওজন' : 'Current weight',
-                    hintText: isBangla ? 'যেমন: ৬৫' : 'For example: 65',
+                    hintText: _measurementUnit == MeasurementUnitMode.imperial
+                        ? (isBangla ? 'যেমন: ১৪৩.৩' : 'For example: 143.3')
+                        : (isBangla ? 'যেমন: ৬৫' : 'For example: 65'),
                     prefixIcon: const Icon(Icons.monitor_weight_outlined),
-                    suffixText: isBangla ? 'কেজি' : 'kg',
+                    suffixText: MeasurementUnitConverter.weightUnit(
+                      _measurementUnit,
+                    ),
                     border: const OutlineInputBorder(),
                   ),
                   validator: _validateWeight,

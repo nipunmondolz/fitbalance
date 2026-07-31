@@ -4,7 +4,9 @@ import 'dart:math' as math;
 import 'package:flutter/foundation.dart';
 import 'package:flutter/material.dart';
 
+import '../services/app_settings_storage_service.dart';
 import '../services/body_metrics_storage_service.dart';
+import '../services/measurement_unit_converter.dart';
 import '../services/daily_log_storage_service.dart';
 import '../services/habit_storage_service.dart';
 import '../services/weight_storage_service.dart';
@@ -105,6 +107,9 @@ class _ProgressScreenState extends State<ProgressScreen>
   bool _isSavingTargetWeight = false;
   bool _isSavingHeight = false;
   int _loadGeneration = 0;
+
+  MeasurementUnitMode get _measurementUnit =>
+      AppSettingsController.instance.currentMeasurementUnit;
 
   int get _completedHabitCount =>
       _habitCompletions.where((isCompleted) => isCompleted).length;
@@ -365,6 +370,9 @@ class _ProgressScreenState extends State<ProgressScreen>
     super.initState();
     WidgetsBinding.instance.addObserver(this);
     widget.refreshListenable.addListener(_handleRefreshRequest);
+    AppSettingsController.instance.measurementUnitListenable.addListener(
+      _handleMeasurementUnitChanged,
+    );
     unawaited(_loadProgress());
   }
 
@@ -388,6 +396,12 @@ class _ProgressScreenState extends State<ProgressScreen>
 
   void _handleRefreshRequest() {
     unawaited(_loadProgress());
+  }
+
+  void _handleMeasurementUnitChanged() {
+    if (mounted) {
+      setState(() {});
+    }
   }
 
   Future<_ProgressDay> _loadProgressDay(DateTime date) async {
@@ -472,8 +486,14 @@ class _ProgressScreenState extends State<ProgressScreen>
   }
 
   String _signedWeightChange(double change) {
-    final prefix = change > 0 ? '+' : '';
-    return '$prefix${change.toStringAsFixed(1)} kg';
+    return MeasurementUnitConverter.formatSignedWeight(
+      change,
+      _measurementUnit,
+    );
+  }
+
+  String _formatWeight(double weightKg) {
+    return MeasurementUnitConverter.formatWeight(weightKg, _measurementUnit);
   }
 
   String _weightDateLabel(DateTime date) {
@@ -538,6 +558,7 @@ class _ProgressScreenState extends State<ProgressScreen>
           initialWeight: initialWeight,
           isEditing: isEditing,
           allowDateSelection: allowDateSelection,
+          measurementUnit: _measurementUnit,
         );
       },
     );
@@ -612,8 +633,8 @@ class _ProgressScreenState extends State<ProgressScreen>
           ),
           content: Text(
             widget.isBangla
-                ? '${_weightDateLabel(entry.date)} তারিখের ${entry.weightKg.toStringAsFixed(1)} kg ওজনটি মুছে যাবে।'
-                : '${entry.weightKg.toStringAsFixed(1)} kg saved on ${_weightDateLabel(entry.date)} will be removed.',
+                ? '${_weightDateLabel(entry.date)} তারিখের ${_formatWeight(entry.weightKg)} ওজনটি মুছে যাবে।'
+                : '${_formatWeight(entry.weightKg)} saved on ${_weightDateLabel(entry.date)} will be removed.',
           ),
           actions: [
             TextButton(
@@ -694,6 +715,7 @@ class _ProgressScreenState extends State<ProgressScreen>
         return _TargetWeightEntrySheet(
           isBangla: widget.isBangla,
           initialTargetWeight: _targetWeightKg,
+          measurementUnit: _measurementUnit,
         );
       },
     );
@@ -762,6 +784,7 @@ class _ProgressScreenState extends State<ProgressScreen>
         return _HeightEntrySheet(
           isBangla: widget.isBangla,
           initialHeightCm: _heightCm,
+          measurementUnit: _measurementUnit,
         );
       },
     );
@@ -1009,6 +1032,9 @@ class _ProgressScreenState extends State<ProgressScreen>
   @override
   void dispose() {
     widget.refreshListenable.removeListener(_handleRefreshRequest);
+    AppSettingsController.instance.measurementUnitListenable.removeListener(
+      _handleMeasurementUnitChanged,
+    );
     WidgetsBinding.instance.removeObserver(this);
     super.dispose();
   }
@@ -1355,10 +1381,12 @@ class _HeightEntrySheet extends StatefulWidget {
   const _HeightEntrySheet({
     required this.isBangla,
     required this.initialHeightCm,
+    required this.measurementUnit,
   });
 
   final bool isBangla;
   final double? initialHeightCm;
+  final MeasurementUnitMode measurementUnit;
 
   @override
   State<_HeightEntrySheet> createState() => _HeightEntrySheetState();
@@ -1369,12 +1397,16 @@ class _HeightEntrySheetState extends State<_HeightEntrySheet> {
   late final TextEditingController _feetController;
   late final TextEditingController _inchesController;
 
-  _HeightEntryMode _mode = _HeightEntryMode.metric;
+  late _HeightEntryMode _mode;
   String? _errorText;
 
   @override
   void initState() {
     super.initState();
+
+    _mode = widget.measurementUnit == MeasurementUnitMode.imperial
+        ? _HeightEntryMode.imperial
+        : _HeightEntryMode.metric;
 
     final initialHeightCm = widget.initialHeightCm;
     _centimetreController = TextEditingController(
@@ -1623,10 +1655,12 @@ class _TargetWeightEntrySheet extends StatefulWidget {
   const _TargetWeightEntrySheet({
     required this.isBangla,
     required this.initialTargetWeight,
+    required this.measurementUnit,
   });
 
   final bool isBangla;
   final double? initialTargetWeight;
+  final MeasurementUnitMode measurementUnit;
 
   @override
   State<_TargetWeightEntrySheet> createState() =>
@@ -1640,8 +1674,14 @@ class _TargetWeightEntrySheetState extends State<_TargetWeightEntrySheet> {
   @override
   void initState() {
     super.initState();
+    final initialTargetWeight = widget.initialTargetWeight;
     _controller = TextEditingController(
-      text: widget.initialTargetWeight?.toStringAsFixed(1) ?? '',
+      text: initialTargetWeight == null
+          ? ''
+          : MeasurementUnitConverter.displayWeightFromKilograms(
+              initialTargetWeight,
+              widget.measurementUnit,
+            ).toStringAsFixed(1),
     );
   }
 
@@ -1649,17 +1689,32 @@ class _TargetWeightEntrySheetState extends State<_TargetWeightEntrySheet> {
     final parsed = double.tryParse(
       _controller.text.trim().replaceAll(',', '.'),
     );
+    final minimum = MeasurementUnitConverter.minimumWeightInput(
+      20,
+      widget.measurementUnit,
+    );
+    final maximum = MeasurementUnitConverter.maximumWeightInput(
+      400,
+      widget.measurementUnit,
+    );
 
-    if (parsed == null || parsed < 20 || parsed > 400) {
+    if (parsed == null || parsed < minimum || parsed > maximum) {
+      final unit = MeasurementUnitConverter.weightUnit(widget.measurementUnit);
+
       setState(() {
         _errorText = widget.isBangla
-            ? '২০ থেকে ৪০০ কেজির মধ্যে সঠিক লক্ষ্য ওজন লিখুন।'
-            : 'Enter a valid target weight between 20 and 400 kg.';
+            ? '${minimum.toStringAsFixed(1)} থেকে ${maximum.toStringAsFixed(1)} $unit-এর মধ্যে সঠিক লক্ষ্য ওজন লিখুন।'
+            : 'Enter a valid target weight between ${minimum.toStringAsFixed(1)} and ${maximum.toStringAsFixed(1)} $unit.';
       });
       return;
     }
 
-    Navigator.of(context).pop(parsed);
+    Navigator.of(context).pop(
+      MeasurementUnitConverter.inputWeightToKilograms(
+        parsed,
+        widget.measurementUnit,
+      ),
+    );
   }
 
   @override
@@ -1710,10 +1765,14 @@ class _TargetWeightEntrySheetState extends State<_TargetWeightEntrySheet> {
               textInputAction: TextInputAction.done,
               decoration: InputDecoration(
                 labelText: widget.isBangla
-                    ? 'লক্ষ্য ওজন (কেজি)'
-                    : 'Target weight (kg)',
-                hintText: '65.0',
-                suffixText: 'kg',
+                    ? 'লক্ষ্য ওজন (${MeasurementUnitConverter.weightUnit(widget.measurementUnit)})'
+                    : 'Target weight (${MeasurementUnitConverter.weightUnit(widget.measurementUnit)})',
+                hintText: widget.measurementUnit == MeasurementUnitMode.imperial
+                    ? '143.3'
+                    : '65.0',
+                suffixText: MeasurementUnitConverter.weightUnit(
+                  widget.measurementUnit,
+                ),
                 errorText: _errorText,
                 border: const OutlineInputBorder(),
               ),
@@ -1750,6 +1809,7 @@ class _WeightEntrySheet extends StatefulWidget {
     required this.initialWeight,
     required this.isEditing,
     required this.allowDateSelection,
+    required this.measurementUnit,
   });
 
   final bool isBangla;
@@ -1757,6 +1817,7 @@ class _WeightEntrySheet extends StatefulWidget {
   final double? initialWeight;
   final bool isEditing;
   final bool allowDateSelection;
+  final MeasurementUnitMode measurementUnit;
 
   @override
   State<_WeightEntrySheet> createState() => _WeightEntrySheetState();
@@ -1775,8 +1836,14 @@ class _WeightEntrySheetState extends State<_WeightEntrySheet> {
       widget.initialDate.month,
       widget.initialDate.day,
     );
+    final initialWeight = widget.initialWeight;
     _controller = TextEditingController(
-      text: widget.initialWeight?.toStringAsFixed(1) ?? '',
+      text: initialWeight == null
+          ? ''
+          : MeasurementUnitConverter.displayWeightFromKilograms(
+              initialWeight,
+              widget.measurementUnit,
+            ).toStringAsFixed(1),
     );
   }
 
@@ -1810,17 +1877,30 @@ class _WeightEntrySheetState extends State<_WeightEntrySheet> {
     final parsed = double.tryParse(
       _controller.text.trim().replaceAll(',', '.'),
     );
+    final minimum = MeasurementUnitConverter.minimumWeightInput(
+      20,
+      widget.measurementUnit,
+    );
+    final maximum = MeasurementUnitConverter.maximumWeightInput(
+      400,
+      widget.measurementUnit,
+    );
 
-    if (parsed == null || parsed < 20 || parsed > 400) {
+    if (parsed == null || parsed < minimum || parsed > maximum) {
+      final unit = MeasurementUnitConverter.weightUnit(widget.measurementUnit);
+
       setState(() {
         _errorText = widget.isBangla
-            ? '২০ থেকে ৪০০ কেজির মধ্যে সঠিক ওজন লিখুন।'
-            : 'Enter a valid weight between 20 and 400 kg.';
+            ? '${minimum.toStringAsFixed(1)} থেকে ${maximum.toStringAsFixed(1)} $unit-এর মধ্যে সঠিক ওজন লিখুন।'
+            : 'Enter a valid weight between ${minimum.toStringAsFixed(1)} and ${maximum.toStringAsFixed(1)} $unit.';
       });
       return null;
     }
 
-    return parsed;
+    return MeasurementUnitConverter.inputWeightToKilograms(
+      parsed,
+      widget.measurementUnit,
+    );
   }
 
   void _submit() {
@@ -1893,9 +1973,15 @@ class _WeightEntrySheetState extends State<_WeightEntrySheet> {
               ),
               textInputAction: TextInputAction.done,
               decoration: InputDecoration(
-                labelText: widget.isBangla ? 'ওজন (কেজি)' : 'Weight (kg)',
-                hintText: '70.5',
-                suffixText: 'kg',
+                labelText: widget.isBangla
+                    ? 'ওজন (${MeasurementUnitConverter.weightUnit(widget.measurementUnit)})'
+                    : 'Weight (${MeasurementUnitConverter.weightUnit(widget.measurementUnit)})',
+                hintText: widget.measurementUnit == MeasurementUnitMode.imperial
+                    ? '155.4'
+                    : '70.5',
+                suffixText: MeasurementUnitConverter.weightUnit(
+                  widget.measurementUnit,
+                ),
                 errorText: _errorText,
                 border: const OutlineInputBorder(),
               ),
@@ -2002,7 +2088,10 @@ class _WeightTrackingCard extends StatelessWidget {
               )
             else ...[
               Text(
-                '${latestWeight!.weightKg.toStringAsFixed(1)} kg',
+                MeasurementUnitConverter.formatWeight(
+                  latestWeight!.weightKg,
+                  AppSettingsController.instance.currentMeasurementUnit,
+                ),
                 style: theme.textTheme.headlineMedium?.copyWith(
                   color: colorScheme.primary,
                   fontWeight: FontWeight.bold,
@@ -2023,8 +2112,10 @@ class _WeightTrackingCard extends StatelessWidget {
                   Expanded(
                     child: _WeightSummaryValue(
                       label: isBangla ? 'শুরুর ওজন' : 'Starting weight',
-                      value:
-                          '${startingWeight!.weightKg.toStringAsFixed(1)} kg',
+                      value: MeasurementUnitConverter.formatWeight(
+                        startingWeight!.weightKg,
+                        AppSettingsController.instance.currentMeasurementUnit,
+                      ),
                     ),
                   ),
                   const SizedBox(width: 12),
@@ -2161,7 +2252,7 @@ class _WeightGoalCard extends StatelessWidget {
             if (!hasTarget)
               Text(
                 isBangla
-                    ? 'লক্ষ্য ওজন ঠিক করলে কত কেজি বাকি এবং কত শতাংশ অগ্রগতি হয়েছে তা দেখা যাবে।'
+                    ? 'লক্ষ্য ওজন ঠিক করলে কতটা বাকি এবং কত শতাংশ অগ্রগতি হয়েছে তা দেখা যাবে।'
                     : 'Set a target weight to see how much remains and your completion percentage.',
                 style: theme.textTheme.bodyMedium?.copyWith(
                   color: colorScheme.onSurfaceVariant,
@@ -2169,7 +2260,10 @@ class _WeightGoalCard extends StatelessWidget {
               )
             else ...[
               Text(
-                '${targetWeightKg!.toStringAsFixed(1)} kg',
+                MeasurementUnitConverter.formatWeight(
+                  targetWeightKg!,
+                  AppSettingsController.instance.currentMeasurementUnit,
+                ),
                 style: theme.textTheme.headlineMedium?.copyWith(
                   color: colorScheme.primary,
                   fontWeight: FontWeight.bold,
@@ -2198,16 +2292,20 @@ class _WeightGoalCard extends StatelessWidget {
                     Expanded(
                       child: _WeightSummaryValue(
                         label: isBangla ? 'সর্বশেষ ওজন' : 'Latest weight',
-                        value: '${latestWeightKg!.toStringAsFixed(1)} kg',
+                        value: MeasurementUnitConverter.formatWeight(
+                          latestWeightKg!,
+                          AppSettingsController.instance.currentMeasurementUnit,
+                        ),
                       ),
                     ),
                     const SizedBox(width: 12),
                     Expanded(
                       child: _WeightSummaryValue(
                         label: isBangla ? 'বাকি' : 'Remaining',
-                        value: isReached
-                            ? '0.0 kg'
-                            : '${remainingKg!.toStringAsFixed(1)} kg',
+                        value: MeasurementUnitConverter.formatWeight(
+                          isReached ? 0 : remainingKg!,
+                          AppSettingsController.instance.currentMeasurementUnit,
+                        ),
                       ),
                     ),
                   ],
@@ -2334,11 +2432,10 @@ class _BmiInsightsCard extends StatelessWidget {
       return '—';
     }
 
-    final totalInches = (value / 2.54).round();
-    final feet = totalInches ~/ 12;
-    final inches = totalInches % 12;
-
-    return '${value.toStringAsFixed(1)} cm • $feet ft $inches in';
+    return MeasurementUnitConverter.formatHeight(
+      value,
+      AppSettingsController.instance.currentMeasurementUnit,
+    );
   }
 
   @override
@@ -2457,7 +2554,10 @@ class _BmiInsightsCard extends StatelessWidget {
                   Expanded(
                     child: _WeightSummaryValue(
                       label: isBangla ? 'সর্বশেষ ওজন' : 'Latest weight',
-                      value: '${latestWeightKg!.toStringAsFixed(1)} kg',
+                      value: MeasurementUnitConverter.formatWeight(
+                        latestWeightKg!,
+                        AppSettingsController.instance.currentMeasurementUnit,
+                      ),
                     ),
                   ),
                   const SizedBox(width: 12),
@@ -2484,8 +2584,8 @@ class _BmiInsightsCard extends StatelessWidget {
                     Expanded(
                       child: Text(
                         isBangla
-                            ? 'আপনার উচ্চতায় adult healthy-weight reference: ${healthyWeightMinKg!.toStringAsFixed(1)}–${healthyWeightMaxKg!.toStringAsFixed(1)} kg'
-                            : 'Adult healthy-weight reference for your height: ${healthyWeightMinKg!.toStringAsFixed(1)}–${healthyWeightMaxKg!.toStringAsFixed(1)} kg',
+                            ? 'আপনার উচ্চতায় প্রাপ্তবয়স্কদের স্বাস্থ্যকর ওজনের রেফারেন্স: ${MeasurementUnitConverter.formatWeightRange(healthyWeightMinKg!, healthyWeightMaxKg!, AppSettingsController.instance.currentMeasurementUnit)}'
+                            : 'Adult healthy-weight reference for your height: ${MeasurementUnitConverter.formatWeightRange(healthyWeightMinKg!, healthyWeightMaxKg!, AppSettingsController.instance.currentMeasurementUnit)}',
                         style: theme.textTheme.bodyMedium?.copyWith(
                           fontWeight: FontWeight.w600,
                         ),
@@ -2608,7 +2708,9 @@ class _WeightTrendCard extends StatelessWidget {
           crossAxisAlignment: CrossAxisAlignment.stretch,
           children: [
             Text(
-              isBangla ? '৭ দিনের ওজন trend' : 'Seven-day weight trend',
+              isBangla
+                  ? '৭ দিনের ওজনের ধারা (${MeasurementUnitConverter.weightUnit(AppSettingsController.instance.currentMeasurementUnit)})'
+                  : 'Seven-day weight trend (${MeasurementUnitConverter.weightUnit(AppSettingsController.instance.currentMeasurementUnit)})',
               style: theme.textTheme.titleMedium?.copyWith(
                 fontWeight: FontWeight.w600,
               ),
@@ -2669,7 +2771,12 @@ class _WeightTrendCard extends StatelessWidget {
                                     child: Text(
                                       weight == null
                                           ? '—'
-                                          : weight.toStringAsFixed(1),
+                                          : MeasurementUnitConverter.displayWeightFromKilograms(
+                                              weight,
+                                              AppSettingsController
+                                                  .instance
+                                                  .currentMeasurementUnit,
+                                            ).toStringAsFixed(1),
                                       style: theme.textTheme.labelSmall
                                           ?.copyWith(
                                             fontWeight: FontWeight.w600,
@@ -2806,7 +2913,10 @@ class _WeightHistoryCard extends StatelessWidget {
                         ),
                       ),
                       title: Text(
-                        '${entry.weightKg.toStringAsFixed(1)} kg',
+                        MeasurementUnitConverter.formatWeight(
+                          entry.weightKg,
+                          AppSettingsController.instance.currentMeasurementUnit,
+                        ),
                         style: theme.textTheme.titleMedium?.copyWith(
                           fontWeight: FontWeight.w600,
                         ),

@@ -5,6 +5,7 @@ import 'package:flutter/material.dart';
 
 import '../services/app_settings_storage_service.dart';
 import '../services/body_metrics_storage_service.dart';
+import '../services/measurement_unit_converter.dart';
 import '../services/profile_preferences_storage_service.dart';
 import '../services/weight_storage_service.dart';
 
@@ -62,6 +63,7 @@ class _ProfileScreenState extends State<ProfileScreen>
   bool _isSavingPreferences = false;
   bool _isSavingLanguage = false;
   bool _isSavingAppearance = false;
+  bool _isSavingMeasurementUnit = false;
   int _loadGeneration = 0;
 
   StoredWeightEntry? get _latestWeight =>
@@ -103,6 +105,9 @@ class _ProfileScreenState extends State<ProfileScreen>
     super.initState();
     WidgetsBinding.instance.addObserver(this);
     widget.refreshListenable.addListener(_handleRefreshRequest);
+    AppSettingsController.instance.measurementUnitListenable.addListener(
+      _handleMeasurementUnitChanged,
+    );
     unawaited(_loadProfile());
   }
 
@@ -126,6 +131,12 @@ class _ProfileScreenState extends State<ProfileScreen>
 
   void _handleRefreshRequest() {
     unawaited(_loadProfile());
+  }
+
+  void _handleMeasurementUnitChanged() {
+    if (mounted) {
+      setState(() {});
+    }
   }
 
   Future<void> _loadProfile() async {
@@ -350,6 +361,63 @@ class _ProfileScreenState extends State<ProfileScreen>
     }
   }
 
+  Future<void> _changeMeasurementUnit(MeasurementUnitMode mode) async {
+    if (_isSavingMeasurementUnit ||
+        mode == AppSettingsController.instance.currentMeasurementUnit) {
+      return;
+    }
+
+    setState(() {
+      _isSavingMeasurementUnit = true;
+    });
+
+    try {
+      await AppSettingsController.instance.updateMeasurementUnit(mode);
+
+      if (!mounted) {
+        return;
+      }
+
+      ScaffoldMessenger.of(context)
+        ..hideCurrentSnackBar()
+        ..showSnackBar(
+          SnackBar(
+            content: Text(
+              mode == MeasurementUnitMode.metric
+                  ? (widget.isBangla
+                        ? 'পরিমাপের একক কেজি ও সেন্টিমিটার করা হয়েছে।'
+                        : 'Measurement units changed to kilograms and centimetres.')
+                  : (widget.isBangla
+                        ? 'পরিমাপের একক পাউন্ড ও ফুট/ইঞ্চি করা হয়েছে।'
+                        : 'Measurement units changed to pounds and feet/inches.'),
+            ),
+          ),
+        );
+    } catch (_) {
+      if (!mounted) {
+        return;
+      }
+
+      ScaffoldMessenger.of(context)
+        ..hideCurrentSnackBar()
+        ..showSnackBar(
+          SnackBar(
+            content: Text(
+              widget.isBangla
+                  ? 'পরিমাপের একক পরিবর্তন করা যায়নি। আবার চেষ্টা করুন।'
+                  : 'Measurement units could not be changed. Please try again.',
+            ),
+          ),
+        );
+    } finally {
+      if (mounted) {
+        setState(() {
+          _isSavingMeasurementUnit = false;
+        });
+      }
+    }
+  }
+
   Future<void> _confirmRestartAssessment() async {
     final shouldRestart = await showDialog<bool>(
       context: context,
@@ -499,11 +567,10 @@ class _ProfileScreenState extends State<ProfileScreen>
       return widget.isBangla ? 'যোগ করা হয়নি' : 'Not added';
     }
 
-    final totalInches = (heightCm / 2.54).round();
-    final feet = totalInches ~/ 12;
-    final inches = totalInches % 12;
-
-    return '${heightCm.toStringAsFixed(1)} cm • $feet ft $inches in';
+    return MeasurementUnitConverter.formatHeight(
+      heightCm,
+      AppSettingsController.instance.currentMeasurementUnit,
+    );
   }
 
   String _weightText(double? weightKg) {
@@ -511,7 +578,10 @@ class _ProfileScreenState extends State<ProfileScreen>
       return widget.isBangla ? 'যোগ করা হয়নি' : 'Not added';
     }
 
-    return '${weightKg.toStringAsFixed(1)} kg';
+    return MeasurementUnitConverter.formatWeight(
+      weightKg,
+      AppSettingsController.instance.currentMeasurementUnit,
+    );
   }
 
   String _bmiCategoryText() {
@@ -537,6 +607,9 @@ class _ProfileScreenState extends State<ProfileScreen>
   @override
   void dispose() {
     widget.refreshListenable.removeListener(_handleRefreshRequest);
+    AppSettingsController.instance.measurementUnitListenable.removeListener(
+      _handleMeasurementUnitChanged,
+    );
     WidgetsBinding.instance.removeObserver(this);
     super.dispose();
   }
@@ -618,6 +691,8 @@ class _ProfileScreenState extends State<ProfileScreen>
                 onLanguageChanged: _changeLanguage,
                 isSavingAppearance: _isSavingAppearance,
                 onAppearanceChanged: _changeAppearance,
+                isSavingMeasurementUnit: _isSavingMeasurementUnit,
+                onMeasurementUnitChanged: _changeMeasurementUnit,
               ),
               const SizedBox(height: 14),
               Container(
@@ -1366,6 +1441,8 @@ class _ProfileAppSettingsCard extends StatelessWidget {
     required this.onLanguageChanged,
     required this.isSavingAppearance,
     required this.onAppearanceChanged,
+    required this.isSavingMeasurementUnit,
+    required this.onMeasurementUnitChanged,
   });
 
   final bool isBangla;
@@ -1373,6 +1450,9 @@ class _ProfileAppSettingsCard extends StatelessWidget {
   final Future<void> Function(bool isBangla) onLanguageChanged;
   final bool isSavingAppearance;
   final Future<void> Function(AppAppearanceMode mode) onAppearanceChanged;
+  final bool isSavingMeasurementUnit;
+  final Future<void> Function(MeasurementUnitMode mode)
+  onMeasurementUnitChanged;
 
   @override
   Widget build(BuildContext context) {
@@ -1407,8 +1487,8 @@ class _ProfileAppSettingsCard extends StatelessWidget {
             const SizedBox(height: 8),
             Text(
               isBangla
-                  ? 'অ্যাপের ভাষা এবং প্রদর্শনের ধরন নির্বাচন করুন। পরিবর্তনগুলো সঙ্গে সঙ্গে কার্যকর হবে।'
-                  : 'Choose the app language and appearance. Changes are applied immediately.',
+                  ? 'অ্যাপের ভাষা, প্রদর্শনের ধরন এবং পরিমাপের একক নির্বাচন করুন। পরিবর্তনগুলো সঙ্গে সঙ্গে কার্যকর হবে।'
+                  : 'Choose the app language, appearance, and measurement units. Changes are applied immediately.',
               style: theme.textTheme.bodyMedium?.copyWith(
                 color: colorScheme.onSurfaceVariant,
               ),
@@ -1555,6 +1635,73 @@ class _ProfileAppSettingsCard extends StatelessWidget {
               isBangla
                   ? 'নির্বাচিত থিম সংরক্ষিত থাকবে এবং অ্যাপ আবার চালু করার পরও একই থাকবে।'
                   : 'Your selected theme is saved and restored after the app restarts.',
+              style: theme.textTheme.bodySmall?.copyWith(
+                color: colorScheme.onSurfaceVariant,
+              ),
+            ),
+            const SizedBox(height: 20),
+            Divider(color: colorScheme.outlineVariant),
+            const SizedBox(height: 14),
+            Row(
+              children: [
+                Icon(Icons.straighten, color: colorScheme.primary),
+                const SizedBox(width: 10),
+                Expanded(
+                  child: Text(
+                    isBangla ? 'পরিমাপের একক' : 'Measurement units',
+                    style: theme.textTheme.bodyLarge?.copyWith(
+                      fontWeight: FontWeight.w600,
+                    ),
+                  ),
+                ),
+                if (isSavingMeasurementUnit)
+                  const SizedBox.square(
+                    dimension: 20,
+                    child: CircularProgressIndicator(strokeWidth: 2),
+                  ),
+              ],
+            ),
+            const SizedBox(height: 8),
+            Text(
+              isBangla
+                  ? 'সংরক্ষিত ওজন ও উচ্চতা কেজি ও সেন্টিমিটারেই থাকবে; শুধু দেখানো ও ইনপুটের একক পরিবর্তন হবে।'
+                  : 'Saved weight and height stay in kilograms and centimetres; only display and input units change.',
+              style: theme.textTheme.bodySmall?.copyWith(
+                color: colorScheme.onSurfaceVariant,
+              ),
+            ),
+            const SizedBox(height: 12),
+            ValueListenableBuilder<MeasurementUnitMode>(
+              valueListenable:
+                  AppSettingsController.instance.measurementUnitListenable,
+              builder: (context, measurementUnit, child) {
+                return SegmentedButton<MeasurementUnitMode>(
+                  segments: [
+                    ButtonSegment<MeasurementUnitMode>(
+                      value: MeasurementUnitMode.metric,
+                      icon: const Icon(Icons.square_foot),
+                      label: Text(isBangla ? 'মেট্রিক' : 'Metric'),
+                    ),
+                    ButtonSegment<MeasurementUnitMode>(
+                      value: MeasurementUnitMode.imperial,
+                      icon: const Icon(Icons.straighten),
+                      label: Text(isBangla ? 'ইম্পেরিয়াল' : 'Imperial'),
+                    ),
+                  ],
+                  selected: <MeasurementUnitMode>{measurementUnit},
+                  onSelectionChanged: isSavingMeasurementUnit
+                      ? null
+                      : (selection) {
+                          unawaited(onMeasurementUnitChanged(selection.first));
+                        },
+                );
+              },
+            ),
+            const SizedBox(height: 8),
+            Text(
+              isBangla
+                  ? 'মেট্রিক: kg ও cm • ইম্পেরিয়াল: lb ও ft/in'
+                  : 'Metric: kg and cm • Imperial: lb and ft/in',
               style: theme.textTheme.bodySmall?.copyWith(
                 color: colorScheme.onSurfaceVariant,
               ),

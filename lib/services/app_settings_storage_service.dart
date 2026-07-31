@@ -3,6 +3,8 @@ import 'package:shared_preferences/shared_preferences.dart';
 
 enum AppAppearanceMode { system, light, dark }
 
+enum MeasurementUnitMode { metric, imperial }
+
 class AppSettingsStorageService {
   AppSettingsStorageService._();
 
@@ -10,6 +12,7 @@ class AppSettingsStorageService {
       AppSettingsStorageService._();
 
   static const String _appearanceModeKey = 'app_appearance_mode_v1';
+  static const String _measurementUnitKey = 'app_measurement_unit_v1';
 
   final SharedPreferencesAsync _preferences = SharedPreferencesAsync();
 
@@ -29,6 +32,18 @@ class AppSettingsStorageService {
   Future<void> saveAppearanceMode(AppAppearanceMode mode) async {
     await _preferences.setString(_appearanceModeKey, mode.name);
   }
+
+  Future<MeasurementUnitMode> loadMeasurementUnit() async {
+    final savedValue = await _preferences.getString(_measurementUnitKey);
+
+    return savedValue == 'imperial'
+        ? MeasurementUnitMode.imperial
+        : MeasurementUnitMode.metric;
+  }
+
+  Future<void> saveMeasurementUnit(MeasurementUnitMode mode) async {
+    await _preferences.setString(_measurementUnitKey, mode.name);
+  }
 }
 
 class AppSettingsController {
@@ -38,22 +53,36 @@ class AppSettingsController {
 
   final ValueNotifier<AppAppearanceMode> _appearanceMode =
       ValueNotifier<AppAppearanceMode>(AppAppearanceMode.system);
+  final ValueNotifier<MeasurementUnitMode> _measurementUnit =
+      ValueNotifier<MeasurementUnitMode>(MeasurementUnitMode.metric);
 
   bool _isInitialised = false;
 
   ValueListenable<AppAppearanceMode> get appearanceModeListenable =>
       _appearanceMode;
 
+  ValueListenable<MeasurementUnitMode> get measurementUnitListenable =>
+      _measurementUnit;
+
   AppAppearanceMode get currentAppearanceMode => _appearanceMode.value;
+
+  MeasurementUnitMode get currentMeasurementUnit => _measurementUnit.value;
 
   Future<void> initialise() async {
     if (_isInitialised) {
       return;
     }
 
-    final savedMode = await AppSettingsStorageService.instance
+    final appearanceFuture = AppSettingsStorageService.instance
         .loadAppearanceMode();
-    _appearanceMode.value = savedMode;
+    final measurementFuture = AppSettingsStorageService.instance
+        .loadMeasurementUnit();
+
+    final appearanceMode = await appearanceFuture;
+    final measurementUnit = await measurementFuture;
+
+    _appearanceMode.value = appearanceMode;
+    _measurementUnit.value = measurementUnit;
     _isInitialised = true;
   }
 
@@ -64,5 +93,14 @@ class AppSettingsController {
 
     await AppSettingsStorageService.instance.saveAppearanceMode(mode);
     _appearanceMode.value = mode;
+  }
+
+  Future<void> updateMeasurementUnit(MeasurementUnitMode mode) async {
+    if (mode == _measurementUnit.value) {
+      return;
+    }
+
+    await AppSettingsStorageService.instance.saveMeasurementUnit(mode);
+    _measurementUnit.value = mode;
   }
 }
