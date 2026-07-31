@@ -3,6 +3,7 @@ import 'dart:async';
 import 'package:flutter/foundation.dart';
 import 'package:flutter/material.dart';
 
+import '../services/app_settings_storage_service.dart';
 import '../services/body_metrics_storage_service.dart';
 import '../services/profile_preferences_storage_service.dart';
 import '../services/weight_storage_service.dart';
@@ -60,6 +61,7 @@ class _ProfileScreenState extends State<ProfileScreen>
   bool _isLoading = true;
   bool _isSavingPreferences = false;
   bool _isSavingLanguage = false;
+  bool _isSavingAppearance = false;
   int _loadGeneration = 0;
 
   StoredWeightEntry? get _latestWeight =>
@@ -278,6 +280,71 @@ class _ProfileScreenState extends State<ProfileScreen>
       if (mounted) {
         setState(() {
           _isSavingLanguage = false;
+        });
+      }
+    }
+  }
+
+  Future<void> _changeAppearance(AppAppearanceMode mode) async {
+    if (_isSavingAppearance ||
+        mode == AppSettingsController.instance.currentAppearanceMode) {
+      return;
+    }
+
+    setState(() {
+      _isSavingAppearance = true;
+    });
+
+    try {
+      await AppSettingsController.instance.updateAppearanceMode(mode);
+
+      if (!mounted) {
+        return;
+      }
+
+      String message;
+
+      switch (mode) {
+        case AppAppearanceMode.system:
+          message = widget.isBangla
+              ? 'প্রদর্শনের ধরন ফোনের সেটিংস অনুযায়ী করা হয়েছে।'
+              : 'Appearance now follows your phone settings.';
+          break;
+        case AppAppearanceMode.light:
+          message = widget.isBangla
+              ? 'লাইট মোড চালু করা হয়েছে।'
+              : 'Light mode has been enabled.';
+          break;
+        case AppAppearanceMode.dark:
+          message = widget.isBangla
+              ? 'ডার্ক মোড চালু করা হয়েছে।'
+              : 'Dark mode has been enabled.';
+          break;
+      }
+
+      ScaffoldMessenger.of(context)
+        ..hideCurrentSnackBar()
+        ..showSnackBar(SnackBar(content: Text(message)));
+    } catch (_) {
+      if (!mounted) {
+        return;
+      }
+
+      ScaffoldMessenger.of(context)
+        ..hideCurrentSnackBar()
+        ..showSnackBar(
+          SnackBar(
+            content: Text(
+              widget.isBangla
+                  ? 'প্রদর্শনের ধরন পরিবর্তন করা যায়নি। আবার চেষ্টা করুন।'
+                  : 'Appearance could not be changed. Please try again.',
+            ),
+          ),
+        );
+    } finally {
+      if (mounted) {
+        setState(() {
+          _isSavingAppearance = false;
         });
       }
     }
@@ -549,6 +616,8 @@ class _ProfileScreenState extends State<ProfileScreen>
                 isBangla: widget.isBangla,
                 isSavingLanguage: _isSavingLanguage,
                 onLanguageChanged: _changeLanguage,
+                isSavingAppearance: _isSavingAppearance,
+                onAppearanceChanged: _changeAppearance,
               ),
               const SizedBox(height: 14),
               Container(
@@ -1295,11 +1364,15 @@ class _ProfileAppSettingsCard extends StatelessWidget {
     required this.isBangla,
     required this.isSavingLanguage,
     required this.onLanguageChanged,
+    required this.isSavingAppearance,
+    required this.onAppearanceChanged,
   });
 
   final bool isBangla;
   final bool isSavingLanguage;
   final Future<void> Function(bool isBangla) onLanguageChanged;
+  final bool isSavingAppearance;
+  final Future<void> Function(AppAppearanceMode mode) onAppearanceChanged;
 
   @override
   Widget build(BuildContext context) {
@@ -1334,8 +1407,8 @@ class _ProfileAppSettingsCard extends StatelessWidget {
             const SizedBox(height: 8),
             Text(
               isBangla
-                  ? 'আপনার পছন্দের ভাষা নির্বাচন করুন। পরিবর্তনটি সঙ্গে সঙ্গে পুরো অ্যাপে কার্যকর হবে।'
-                  : 'Choose your preferred language. The change is applied across the app immediately.',
+                  ? 'অ্যাপের ভাষা এবং প্রদর্শনের ধরন নির্বাচন করুন। পরিবর্তনগুলো সঙ্গে সঙ্গে কার্যকর হবে।'
+                  : 'Choose the app language and appearance. Changes are applied immediately.',
               style: theme.textTheme.bodyMedium?.copyWith(
                 color: colorScheme.onSurfaceVariant,
               ),
@@ -1386,6 +1459,102 @@ class _ProfileAppSettingsCard extends StatelessWidget {
               isBangla
                   ? 'নির্বাচিত ভাষা সংরক্ষিত থাকবে এবং অ্যাপ আবার চালু করলেও একই ভাষা থাকবে।'
                   : 'Your selected language is saved and restored when the app is opened again.',
+              style: theme.textTheme.bodySmall?.copyWith(
+                color: colorScheme.onSurfaceVariant,
+              ),
+            ),
+            const SizedBox(height: 20),
+            Divider(color: colorScheme.outlineVariant),
+            const SizedBox(height: 14),
+            Row(
+              children: [
+                Icon(Icons.brightness_6_outlined, color: colorScheme.primary),
+                const SizedBox(width: 10),
+                Expanded(
+                  child: Text(
+                    isBangla ? 'প্রদর্শনের ধরন' : 'Appearance',
+                    style: theme.textTheme.bodyLarge?.copyWith(
+                      fontWeight: FontWeight.w600,
+                    ),
+                  ),
+                ),
+                if (isSavingAppearance)
+                  const SizedBox.square(
+                    dimension: 20,
+                    child: CircularProgressIndicator(strokeWidth: 2),
+                  ),
+              ],
+            ),
+            const SizedBox(height: 8),
+            Text(
+              isBangla
+                  ? 'ফোনের সেটিংস অনুযায়ী দিলে ফোনের লাইট বা ডার্ক মোড অনুসরণ করবে।'
+                  : 'System default follows your phone’s Light or Dark Mode.',
+              style: theme.textTheme.bodySmall?.copyWith(
+                color: colorScheme.onSurfaceVariant,
+              ),
+            ),
+            const SizedBox(height: 12),
+            ValueListenableBuilder<AppAppearanceMode>(
+              valueListenable:
+                  AppSettingsController.instance.appearanceModeListenable,
+              builder: (context, appearanceMode, child) {
+                return DropdownButtonFormField<AppAppearanceMode>(
+                  key: ValueKey<AppAppearanceMode>(appearanceMode),
+                  initialValue: appearanceMode,
+                  decoration: InputDecoration(
+                    labelText: isBangla ? 'থিম নির্বাচন করুন' : 'Choose theme',
+                    border: const OutlineInputBorder(),
+                  ),
+                  items: AppAppearanceMode.values
+                      .map((mode) {
+                        late final String label;
+                        late final IconData icon;
+
+                        switch (mode) {
+                          case AppAppearanceMode.system:
+                            label = isBangla
+                                ? 'ফোনের সেটিংস অনুযায়ী'
+                                : 'System default';
+                            icon = Icons.settings_suggest_outlined;
+                            break;
+                          case AppAppearanceMode.light:
+                            label = isBangla ? 'লাইট' : 'Light';
+                            icon = Icons.light_mode_outlined;
+                            break;
+                          case AppAppearanceMode.dark:
+                            label = isBangla ? 'ডার্ক' : 'Dark';
+                            icon = Icons.dark_mode_outlined;
+                            break;
+                        }
+
+                        return DropdownMenuItem<AppAppearanceMode>(
+                          value: mode,
+                          child: Row(
+                            children: [
+                              Icon(icon, size: 20),
+                              const SizedBox(width: 10),
+                              Text(label),
+                            ],
+                          ),
+                        );
+                      })
+                      .toList(growable: false),
+                  onChanged: isSavingAppearance
+                      ? null
+                      : (mode) {
+                          if (mode != null) {
+                            unawaited(onAppearanceChanged(mode));
+                          }
+                        },
+                );
+              },
+            ),
+            const SizedBox(height: 10),
+            Text(
+              isBangla
+                  ? 'নির্বাচিত থিম সংরক্ষিত থাকবে এবং অ্যাপ আবার চালু করার পরও একই থাকবে।'
+                  : 'Your selected theme is saved and restored after the app restarts.',
               style: theme.textTheme.bodySmall?.copyWith(
                 color: colorScheme.onSurfaceVariant,
               ),
