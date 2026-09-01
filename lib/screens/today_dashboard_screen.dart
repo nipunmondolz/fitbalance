@@ -147,7 +147,7 @@ class _TodayDashboardScreenState extends State<TodayDashboardScreen>
 
     if (checkIn == null) {
       return isBangla
-          ? 'আজ এখনো Daily Check-in করা হয়নি।'
+          ? 'আজ এখনো দৈনিক চেক-ইন করা হয়নি।'
           : 'No daily check-in has been saved yet.';
     }
 
@@ -208,11 +208,11 @@ class _TodayDashboardScreenState extends State<TodayDashboardScreen>
             : 'Have 3 main meals at similar times and avoid long gaps without food.';
       case 'irregular':
         return isBangla
-            ? 'আজকের কাজ অনুযায়ী ৩টি flexible meal window আগে থেকেই ঠিক করে রাখুন।'
+            ? 'আজকের কাজ অনুযায়ী ৩টি নমনীয় খাবারের সময় আগে থেকেই ঠিক করে রাখুন।'
             : 'Set 3 flexible meal windows in advance around today’s schedule.';
       default:
         return isBangla
-            ? 'কাজের shift অনুযায়ী meal time ও বহনযোগ্য খাবার আগে থেকে পরিকল্পনা করুন।'
+            ? 'কাজের শিফট অনুযায়ী খাবারের সময় ও বহনযোগ্য খাবার আগে থেকে পরিকল্পনা করুন।'
             : 'Plan meal times and portable foods around your work shift.';
     }
   }
@@ -225,11 +225,11 @@ class _TodayDashboardScreenState extends State<TodayDashboardScreen>
             : 'Aim for about 30 minutes of walking or light exercise today.';
       case 'moderate':
         return isBangla
-            ? 'আজকের নিয়মিত activity বজায় রাখুন এবং recovery-এর জন্য সময় রাখুন।'
+            ? 'আজকের নিয়মিত শারীরিক সক্রিয়তা বজায় রাখুন এবং বিশ্রামের জন্য সময় রাখুন।'
             : 'Maintain your regular activity today and allow time for recovery.';
       case 'high':
         return isBangla
-            ? 'Training-এর সঙ্গে খাবার, পানি ও recovery-এর ভারসাম্য বজায় রাখুন।'
+            ? 'ব্যায়ামের সঙ্গে খাবার, পানি ও বিশ্রামের ভারসাম্য বজায় রাখুন।'
             : 'Balance today’s training with food, hydration, and recovery.';
       default:
         return isBangla
@@ -246,15 +246,15 @@ class _TodayDashboardScreenState extends State<TodayDashboardScreen>
             : 'Try going to bed a little earlier to gradually increase your sleep.';
       case '6_to_7':
         return isBangla
-            ? 'নিয়মিত bedtime রাখুন এবং সম্ভব হলে ৭ ঘণ্টা বা বেশি ঘুমান।'
+            ? 'নিয়মিত ঘুমানোর সময় বজায় রাখুন এবং সম্ভব হলে ৭ ঘণ্টা বা বেশি ঘুমান।'
             : 'Keep a regular bedtime and aim for at least 7 hours when possible.';
       case '7_to_9':
         return isBangla
-            ? 'বর্তমান ৭–৯ ঘণ্টার ঘুম এবং নিয়মিত sleep schedule বজায় রাখুন।'
+            ? 'বর্তমান ৭–৯ ঘণ্টার ঘুম এবং নিয়মিত ঘুমের সময়সূচি বজায় রাখুন।'
             : 'Maintain your current 7–9 hours of sleep and regular schedule.';
       default:
         return isBangla
-            ? 'নিয়মিত sleep schedule রাখুন এবং ঘুমের পর সতেজতা লক্ষ্য করুন।'
+            ? 'নিয়মিত ঘুমের সময়সূচি বজায় রাখুন এবং ঘুমের পর সতেজতা লক্ষ্য করুন।'
             : 'Keep a regular sleep schedule and notice how refreshed you feel.';
     }
   }
@@ -267,11 +267,11 @@ class _TodayDashboardScreenState extends State<TodayDashboardScreen>
             : 'Choose accessible local foods such as lentils, eggs, chickpeas, and seasonal vegetables.';
       case 'moderate':
         return isBangla
-            ? 'স্থানীয় খাবারের সঙ্গে মাছ, মুরগি, দুধ বা দইয়ের মতো protein source রাখুন।'
+            ? 'স্থানীয় খাবারের সঙ্গে মাছ, মুরগি, দুধ বা দইয়ের মতো আমিষের উৎস রাখুন।'
             : 'Combine local foods with protein sources such as fish, chicken, milk, or yogurt.';
       default:
         return isBangla
-            ? 'বিভিন্ন whole food বেছে নিয়ে portion ও খাবারের ভারসাম্য বজায় রাখুন।'
+            ? 'বিভিন্ন পুষ্টিকর খাবার বেছে নিয়ে পরিমাণ ও খাবারের ভারসাম্য বজায় রাখুন।'
             : 'Choose varied whole foods while keeping portions balanced.';
     }
   }
@@ -353,7 +353,7 @@ class _TodayDashboardScreenState extends State<TodayDashboardScreen>
                           const SizedBox(height: 10),
                           Text(
                             isBangla
-                                ? 'দৈনিক calorie target'
+                                ? 'দৈনিক ক্যালরি লক্ষ্য'
                                 : 'Daily calorie target',
                             style: theme.textTheme.bodyMedium?.copyWith(
                               color: colorScheme.onPrimaryContainer,
@@ -392,7 +392,7 @@ class _TodayDashboardScreenState extends State<TodayDashboardScreen>
                           Expanded(
                             child: Text(
                               isBangla
-                                  ? 'আজকের calorie progress'
+                                  ? 'আজকের ক্যালরি অগ্রগতি'
                                   : 'Today’s calorie progress',
                               style: theme.textTheme.titleMedium?.copyWith(
                                 fontWeight: FontWeight.w600,
@@ -427,10 +427,10 @@ class _TodayDashboardScreenState extends State<TodayDashboardScreen>
                       Text(
                         _dailyLogSummary.calories == 0
                             ? (isBangla
-                                  ? 'আজকের খাবার যোগ করলে calorie progress এখানে দেখা যাবে।'
+                                  ? 'আজকের খাবার যোগ করলে ক্যালরি অগ্রগতি এখানে দেখা যাবে।'
                                   : 'Log today’s meals to see calorie progress here.')
                             : (isBangla
-                                  ? 'Daily Log-এর খাবার থেকে এই progress আপডেট হয়েছে।'
+                                  ? 'দৈনিক লগের খাবার থেকে এই অগ্রগতি হালনাগাদ হয়েছে।'
                                   : 'This progress is updated from today’s meal log.'),
                         style: theme.textTheme.bodySmall?.copyWith(
                           color: colorScheme.onSurfaceVariant,
@@ -514,7 +514,7 @@ class _TodayDashboardScreenState extends State<TodayDashboardScreen>
               const SizedBox(height: 12),
               _FocusItem(
                 icon: Icons.bedtime_outlined,
-                title: isBangla ? 'ঘুম ও recovery' : 'Sleep and recovery',
+                title: isBangla ? 'ঘুম ও বিশ্রাম' : 'Sleep and recovery',
                 description: _sleepFocus(),
               ),
               const SizedBox(height: 12),

@@ -864,7 +864,7 @@ class _ProgressScreenState extends State<ProgressScreen>
 
     if (checkIn == null) {
       return widget.isBangla
-          ? 'আজ এখনো Daily Check-in করা হয়নি।'
+          ? 'আজ এখনো দৈনিক চেক-ইন করা হয়নি।'
           : 'No daily check-in has been saved yet.';
     }
 
@@ -1282,7 +1282,7 @@ class _ProgressScreenState extends State<ProgressScreen>
               const SizedBox(height: 6),
               Text(
                 widget.isBangla
-                    ? 'সারাংশ, chart এবং প্রতিদিনের সংরক্ষিত তথ্য একসঙ্গে দেখুন।'
+                    ? 'সারাংশ, চার্ট এবং প্রতিদিনের সংরক্ষিত তথ্য একসঙ্গে দেখুন।'
                     : 'Review averages, charts, and saved daily records together.',
                 style: theme.textTheme.bodyMedium?.copyWith(
                   color: colorScheme.onSurfaceVariant,
@@ -1325,7 +1325,7 @@ class _ProgressScreenState extends State<ProgressScreen>
               if (_sevenDayProgress.isEmpty && !_isLoading)
                 _EmptyHistoryCard(
                   message: widget.isBangla
-                      ? 'এখনো কোনো history পাওয়া যায়নি।'
+                      ? 'এখনো কোনো ইতিহাস পাওয়া যায়নি।'
                       : 'No history is available yet.',
                 )
               else
@@ -1549,7 +1549,7 @@ class _HeightEntrySheetState extends State<_HeightEntrySheet> {
             const SizedBox(height: 6),
             Text(
               widget.isBangla
-                  ? 'BMI ও healthy weight range হিসাবের জন্য উচ্চতা ব্যবহার হবে।'
+                  ? 'BMI ও স্বাস্থ্যকর ওজনের সীমা হিসাবের জন্য উচ্চতা ব্যবহার হবে।'
                   : 'Height is used to calculate BMI and the healthy weight reference range.',
             ),
             const SizedBox(height: 18),
@@ -1752,7 +1752,7 @@ class _TargetWeightEntrySheetState extends State<_TargetWeightEntrySheet> {
             const SizedBox(height: 6),
             Text(
               widget.isBangla
-                  ? 'শুরুর ওজন ও সর্বশেষ ওজন থেকে goal progress হিসাব হবে।'
+                  ? 'শুরুর ওজন ও সর্বশেষ ওজন থেকে লক্ষ্য অগ্রগতি হিসাব হবে।'
                   : 'Goal progress is calculated from your starting and latest weights.',
             ),
             const SizedBox(height: 18),
@@ -1948,7 +1948,7 @@ class _WeightEntrySheetState extends State<_WeightEntrySheet> {
             const SizedBox(height: 6),
             Text(
               widget.isBangla
-                  ? 'একই তারিখে আবার save করলে আগের ওজনটি update হবে।'
+                  ? 'একই তারিখে আবার সংরক্ষণ করলে আগের ওজনটি হালনাগাদ হবে।'
                   : 'Saving on an existing date updates that weight entry.',
             ),
             const SizedBox(height: 18),
@@ -2280,7 +2280,7 @@ class _WeightGoalCard extends StatelessWidget {
               if (!canCalculateProgress)
                 Text(
                   isBangla
-                      ? 'Goal progress হিসাব করতে অন্তত একটি ওজনের entry যোগ করুন।'
+                      ? 'লক্ষ্য অগ্রগতি হিসাব করতে অন্তত একটি ওজনের এন্ট্রি যোগ করুন।'
                       : 'Add at least one weight entry to calculate goal progress.',
                   style: theme.textTheme.bodyMedium?.copyWith(
                     color: colorScheme.onSurfaceVariant,
@@ -2317,7 +2317,7 @@ class _WeightGoalCard extends StatelessWidget {
                       child: Text(
                         isReached
                             ? (isBangla ? 'লক্ষ্য অর্জিত' : 'Target reached')
-                            : 'Goal progress',
+                            : (isBangla ? 'লক্ষ্য অগ্রগতি' : 'Goal progress'),
                         style: theme.textTheme.titleSmall?.copyWith(
                           fontWeight: FontWeight.w600,
                         ),
@@ -2392,11 +2392,11 @@ class _BmiInsightsCard extends StatelessWidget {
       case _BmiCategory.underweight:
         return isBangla ? 'কম ওজন' : 'Underweight';
       case _BmiCategory.healthy:
-        return isBangla ? 'স্বাস্থ্যকর ওজনের range' : 'Healthy weight range';
+        return isBangla ? 'স্বাস্থ্যকর ওজনের সীমা' : 'Healthy weight range';
       case _BmiCategory.overweight:
         return isBangla ? 'অতিরিক্ত ওজন' : 'Overweight';
       case _BmiCategory.obesity:
-        return isBangla ? 'স্থূলতার range' : 'Obesity range';
+        return isBangla ? 'স্থূলতার সীমা' : 'Obesity range';
       case null:
         return '—';
     }
@@ -2406,19 +2406,19 @@ class _BmiInsightsCard extends StatelessWidget {
     switch (category) {
       case _BmiCategory.underweight:
         return isBangla
-            ? 'BMI adult reference range-এর নিচে। অনিচ্ছাকৃতভাবে ওজন কমলে স্বাস্থ্যকর্মীর পরামর্শ নিন।'
+            ? 'BMI প্রাপ্তবয়স্কদের রেফারেন্স সীমার নিচে। অনিচ্ছাকৃতভাবে ওজন কমলে স্বাস্থ্যকর্মীর পরামর্শ নিন।'
             : 'BMI is below the adult reference range. Seek professional advice if weight loss was unintentional.';
       case _BmiCategory.healthy:
         return isBangla
-            ? 'BMI adult healthy-weight reference range-এর মধ্যে আছে।'
+            ? 'BMI প্রাপ্তবয়স্কদের স্বাস্থ্যকর ওজনের রেফারেন্স সীমার মধ্যে আছে।'
             : 'BMI is within the adult healthy-weight reference range.';
       case _BmiCategory.overweight:
         return isBangla
-            ? 'BMI adult healthy-weight reference range-এর উপরে। BMI শরীরের গঠন সরাসরি মাপে না।'
+            ? 'BMI প্রাপ্তবয়স্কদের স্বাস্থ্যকর ওজনের রেফারেন্স সীমার উপরে। BMI শরীরের গঠন সরাসরি মাপে না।'
             : 'BMI is above the adult healthy-weight reference range. BMI does not directly measure body composition.';
       case _BmiCategory.obesity:
         return isBangla
-            ? 'BMI adult obesity range-এ আছে। ব্যক্তিগত স্বাস্থ্যঝুঁকি বুঝতে স্বাস্থ্যকর্মীর পরামর্শ সহায়ক হতে পারে।'
+            ? 'BMI প্রাপ্তবয়স্কদের স্থূলতার সীমায় আছে। ব্যক্তিগত স্বাস্থ্যঝুঁকি বুঝতে স্বাস্থ্যকর্মীর পরামর্শ সহায়ক হতে পারে।'
             : 'BMI is in the adult obesity range. Professional guidance may help assess individual health risk.';
       case null:
         return '';
@@ -2499,7 +2499,7 @@ class _BmiInsightsCard extends StatelessWidget {
             else if (!hasWeight)
               Text(
                 isBangla
-                    ? 'উচ্চতা সংরক্ষিত হয়েছে। BMI হিসাব করতে অন্তত একটি ওজনের entry যোগ করুন।'
+                    ? 'উচ্চতা সংরক্ষিত হয়েছে। BMI হিসাব করতে অন্তত একটি ওজনের এন্ট্রি যোগ করুন।'
                     : 'Height is saved. Add at least one weight entry to calculate BMI.',
                 style: theme.textTheme.bodyMedium?.copyWith(
                   color: colorScheme.onSurfaceVariant,
@@ -2620,7 +2620,7 @@ class _BmiInsightsCard extends StatelessWidget {
             const SizedBox(height: 10),
             Text(
               isBangla
-                  ? 'BMI একটি adult screening measure—এটি diagnosis বা শরীরের fat-এর সরাসরি measurement নয়।'
+                  ? 'BMI প্রাপ্তবয়স্কদের জন্য একটি প্রাথমিক যাচাইয়ের মাপকাঠি—এটি রোগনির্ণয় নয় এবং শরীরের চর্বি সরাসরি মাপে না।'
                   : 'BMI is an adult screening measure, not a diagnosis or a direct measurement of body fat.',
               style: theme.textTheme.bodySmall?.copyWith(
                 color: colorScheme.onSurfaceVariant,
@@ -2718,7 +2718,7 @@ class _WeightTrendCard extends StatelessWidget {
             const SizedBox(height: 4),
             Text(
               isBangla
-                  ? 'ওজন শুধু যেদিন save করা হয়েছে, সেই দিনেই দেখানো হবে।'
+                  ? 'ওজন শুধু যেদিন সংরক্ষণ করা হয়েছে, সেই দিনেই দেখানো হবে।'
                   : 'Weight appears only on days where an entry was saved.',
               style: theme.textTheme.bodySmall?.copyWith(
                 color: colorScheme.onSurfaceVariant,
@@ -2877,7 +2877,7 @@ class _WeightHistoryCard extends StatelessWidget {
             const SizedBox(height: 4),
             Text(
               isBangla
-                  ? 'সর্বশেষ entry উপরে দেখানো হচ্ছে।'
+                  ? 'সর্বশেষ এন্ট্রি উপরে দেখানো হচ্ছে।'
                   : 'The newest entry appears first.',
               style: theme.textTheme.bodySmall?.copyWith(
                 color: colorScheme.onSurfaceVariant,
@@ -3138,7 +3138,7 @@ class _SevenDayChartCard extends StatelessWidget {
           crossAxisAlignment: CrossAxisAlignment.stretch,
           children: [
             Text(
-              isBangla ? '৭ দিনের chart' : 'Seven-day chart',
+              isBangla ? '৭ দিনের চার্ট' : 'Seven-day chart',
               style: theme.textTheme.titleMedium?.copyWith(
                 fontWeight: FontWeight.w600,
               ),
@@ -3187,7 +3187,7 @@ class _SevenDayChartCard extends StatelessWidget {
             const SizedBox(height: 6),
             Text(
               isBangla
-                  ? 'বাম দিকের bar সবচেয়ে পুরোনো দিন, ডান দিকের bar আজ।'
+                  ? 'বাম দিকের বার সবচেয়ে পুরোনো দিন, ডান দিকের বার আজ।'
                   : 'The oldest day is on the left and today is on the right.',
               style: theme.textTheme.bodySmall?.copyWith(
                 color: colorScheme.onSurfaceVariant,

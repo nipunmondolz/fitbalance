@@ -1079,7 +1079,7 @@ class _DailyLogScreenState extends State<DailyLogScreen>
         title: Text(widget.isBangla ? 'এন্ট্রি মুছবেন?' : 'Delete entry?'),
         content: Text(
           widget.isBangla
-              ? 'এই Daily Log এন্ট্রিটি সরানো হবে।'
+              ? 'দৈনিক লগের এই এন্ট্রিটি সরানো হবে।'
               : 'This Daily Log entry will be removed.',
         ),
         actions: [

@@ -460,7 +460,7 @@ class _LearnArticleCard extends StatelessWidget {
                       children: [
                         Expanded(
                           child: Text(
-                            '${isBangla ? 'তথ্যসূত্র' : 'Based on'}: ${article.sourceLabel}',
+                            "${isBangla ? 'তথ্যসূত্র' : 'Based on'}: ${isBangla && article.sourceLabel == 'Behaviour-change principle' ? 'আচরণ পরিবর্তনের নীতি' : article.sourceLabel}",
                             style: theme.textTheme.bodySmall?.copyWith(
                               color: colorScheme.onSurfaceVariant,
                             ),
@@ -579,7 +579,7 @@ class _LearnArticleScreen extends StatelessWidget {
                 borderRadius: BorderRadius.circular(15),
               ),
               child: Text(
-                '${isBangla ? 'তথ্যসূত্র' : 'Information basis'}: ${article.sourceLabel}',
+                "${isBangla ? 'তথ্যসূত্র' : 'Information basis'}: ${isBangla && article.sourceLabel == 'Behaviour-change principle' ? 'আচরণ পরিবর্তনের নীতি' : article.sourceLabel}",
                 style: theme.textTheme.bodySmall?.copyWith(
                   color: colorScheme.onSecondaryContainer,
                   fontWeight: FontWeight.w600,
