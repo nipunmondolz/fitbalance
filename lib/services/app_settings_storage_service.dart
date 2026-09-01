@@ -103,4 +103,9 @@ class AppSettingsController {
     await AppSettingsStorageService.instance.saveMeasurementUnit(mode);
     _measurementUnit.value = mode;
   }
+
+  void resetToDefaultsAfterDataClear() {
+    _appearanceMode.value = AppAppearanceMode.system;
+    _measurementUnit.value = MeasurementUnitMode.metric;
+  }
 }

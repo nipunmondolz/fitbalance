@@ -6,8 +6,11 @@ import 'package:flutter/material.dart';
 import '../services/app_settings_storage_service.dart';
 import '../services/body_metrics_storage_service.dart';
 import '../services/measurement_unit_converter.dart';
+import '../services/privacy_reset_service.dart';
 import '../services/profile_preferences_storage_service.dart';
 import '../services/weight_storage_service.dart';
+
+import 'app_startup_screen.dart';
 
 class ProfileScreen extends StatefulWidget {
   const ProfileScreen({
@@ -64,6 +67,7 @@ class _ProfileScreenState extends State<ProfileScreen>
   bool _isSavingLanguage = false;
   bool _isSavingAppearance = false;
   bool _isSavingMeasurementUnit = false;
+  bool _isResettingData = false;
   int _loadGeneration = 0;
 
   StoredWeightEntry? get _latestWeight =>
@@ -418,6 +422,86 @@ class _ProfileScreenState extends State<ProfileScreen>
     }
   }
 
+  Future<void> _confirmResetAllData() async {
+    if (_isResettingData) {
+      return;
+    }
+
+    final shouldReset = await showDialog<bool>(
+      context: context,
+      builder: (dialogContext) {
+        return AlertDialog(
+          icon: const Icon(Icons.delete_forever_outlined),
+          title: Text(
+            widget.isBangla
+                ? 'সব FitBalance ডেটা মুছবেন?'
+                : 'Delete all FitBalance data?',
+          ),
+          content: Text(
+            widget.isBangla
+                ? 'আপনার সংরক্ষিত প্রোফাইল, ওজনের ইতিহাস, লক্ষ্য ওজন, দৈনিক লগ, অভ্যাস, দৈনিক চেক-ইন, রিমাইন্ডার এবং অ্যাপ সেটিংস স্থায়ীভাবে মুছে যাবে। এই কাজটি ফিরিয়ে আনা যাবে না।'
+                : 'Your saved profile, weight history, target weight, daily logs, habits, daily check-ins, reminders, and app settings will be permanently deleted. This cannot be undone.',
+          ),
+          actions: [
+            TextButton(
+              onPressed: () => Navigator.pop(dialogContext, false),
+              child: Text(widget.isBangla ? 'বাতিল' : 'Cancel'),
+            ),
+            FilledButton(
+              onPressed: () => Navigator.pop(dialogContext, true),
+              child: Text(
+                widget.isBangla ? 'সব ডেটা মুছুন' : 'Delete all data',
+              ),
+            ),
+          ],
+        );
+      },
+    );
+
+    if (shouldReset != true || !mounted) {
+      return;
+    }
+
+    setState(() {
+      _isResettingData = true;
+    });
+
+    try {
+      await PrivacyResetService.instance.resetAllLocalData();
+
+      if (!mounted) {
+        return;
+      }
+
+      Navigator.of(context).pushAndRemoveUntil(
+        MaterialPageRoute<void>(builder: (context) => const AppStartupScreen()),
+        (route) => false,
+      );
+    } catch (_) {
+      if (!mounted) {
+        return;
+      }
+
+      ScaffoldMessenger.of(context)
+        ..hideCurrentSnackBar()
+        ..showSnackBar(
+          SnackBar(
+            content: Text(
+              widget.isBangla
+                  ? 'সব ডেটা মুছে ফেলা যায়নি। আবার চেষ্টা করুন।'
+                  : 'All app data could not be deleted. Please try again.',
+            ),
+          ),
+        );
+    } finally {
+      if (mounted) {
+        setState(() {
+          _isResettingData = false;
+        });
+      }
+    }
+  }
+
   Future<void> _confirmRestartAssessment() async {
     final shouldRestart = await showDialog<bool>(
       context: context,
@@ -693,6 +777,12 @@ class _ProfileScreenState extends State<ProfileScreen>
                 onAppearanceChanged: _changeAppearance,
                 isSavingMeasurementUnit: _isSavingMeasurementUnit,
                 onMeasurementUnitChanged: _changeMeasurementUnit,
+              ),
+              const SizedBox(height: 14),
+              _ProfilePrivacyCard(
+                isBangla: widget.isBangla,
+                isResetting: _isResettingData,
+                onReset: _confirmResetAllData,
               ),
               const SizedBox(height: 14),
               Container(
@@ -1704,6 +1794,98 @@ class _ProfileAppSettingsCard extends StatelessWidget {
                   : 'Metric: kg and cm • Imperial: lb and ft/in',
               style: theme.textTheme.bodySmall?.copyWith(
                 color: colorScheme.onSurfaceVariant,
+              ),
+            ),
+          ],
+        ),
+      ),
+    );
+  }
+}
+
+class _ProfilePrivacyCard extends StatelessWidget {
+  const _ProfilePrivacyCard({
+    required this.isBangla,
+    required this.isResetting,
+    required this.onReset,
+  });
+
+  final bool isBangla;
+  final bool isResetting;
+  final Future<void> Function() onReset;
+
+  @override
+  Widget build(BuildContext context) {
+    final theme = Theme.of(context);
+    final colorScheme = theme.colorScheme;
+
+    return Card(
+      margin: EdgeInsets.zero,
+      elevation: 0,
+      color: colorScheme.surfaceContainerLowest,
+      shape: RoundedRectangleBorder(
+        borderRadius: BorderRadius.circular(18),
+        side: BorderSide(color: colorScheme.outlineVariant),
+      ),
+      child: Padding(
+        padding: const EdgeInsets.all(18),
+        child: Column(
+          crossAxisAlignment: CrossAxisAlignment.stretch,
+          children: [
+            Row(
+              children: [
+                Icon(Icons.privacy_tip_outlined, color: colorScheme.primary),
+                const SizedBox(width: 10),
+                Text(
+                  isBangla ? 'গোপনীয়তা ও ডেটা' : 'Privacy and data',
+                  style: theme.textTheme.titleMedium?.copyWith(
+                    fontWeight: FontWeight.w600,
+                  ),
+                ),
+              ],
+            ),
+            const SizedBox(height: 8),
+            Text(
+              isBangla
+                  ? 'FitBalance-এর এই সংস্করণে আপনার স্বাস্থ্য ও ব্যবহারসংক্রান্ত তথ্য এই ডিভাইসেই সংরক্ষিত থাকে।'
+                  : 'In this version of FitBalance, your health and usage data is stored on this device.',
+              style: theme.textTheme.bodyMedium?.copyWith(
+                color: colorScheme.onSurfaceVariant,
+              ),
+            ),
+            const SizedBox(height: 14),
+            Container(
+              padding: const EdgeInsets.all(14),
+              decoration: BoxDecoration(
+                color: colorScheme.errorContainer,
+                borderRadius: BorderRadius.circular(14),
+              ),
+              child: Text(
+                isBangla
+                    ? 'সব ডেটা মুছলে প্রোফাইল, ওজন, দৈনিক লগ, অভ্যাস, চেক-ইন, রিমাইন্ডার ও অ্যাপ সেটিংস আর ফিরিয়ে আনা যাবে না।'
+                    : 'Deleting all data permanently removes your profile, weights, daily logs, habits, check-ins, reminders, and app settings.',
+                style: theme.textTheme.bodySmall?.copyWith(
+                  color: colorScheme.onErrorContainer,
+                ),
+              ),
+            ),
+            const SizedBox(height: 14),
+            FilledButton.icon(
+              style: FilledButton.styleFrom(
+                backgroundColor: colorScheme.error,
+                foregroundColor: colorScheme.onError,
+              ),
+              onPressed: isResetting ? null : () => unawaited(onReset()),
+              icon: isResetting
+                  ? const SizedBox.square(
+                      dimension: 18,
+                      child: CircularProgressIndicator(strokeWidth: 2),
+                    )
+                  : const Icon(Icons.delete_forever_outlined),
+              label: Text(
+                isBangla
+                    ? 'সব FitBalance ডেটা মুছুন'
+                    : 'Delete all FitBalance data',
               ),
             ),
           ],
