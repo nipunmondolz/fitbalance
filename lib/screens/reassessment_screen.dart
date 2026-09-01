@@ -378,7 +378,7 @@ class _ReassessmentScreenState extends State<ReassessmentScreen> {
               _ReassessmentResultRow(
                 label: widget.isBangla
                     ? 'ওজন বজায় রাখার হিসাব'
-                    : 'ওজন বজায় রাখার হিসাব',
+                    : 'Weight maintenance estimate',
                 value: '${result.tdee.round()} kcal',
               ),
               const SizedBox(height: 14),
