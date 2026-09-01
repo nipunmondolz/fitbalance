@@ -4,6 +4,26 @@
 
 > **Portfolio status:** Working solo MVP with physical-device regression testing and automated tests.
 
+## Download Android APK
+
+The latest tested Android release is available from GitHub Releases.
+
+**[Download FitBalance v1.0.0 APK](https://github.com/nipunmondolz/fitbalance/releases/download/v1.0.0/FitBalance-v1.0.0.apk)**
+
+- Version: `1.0.0`
+- Version code: `1`
+- APK size: ~51.8 MB
+- Tested on: Google Pixel 6a
+- Release status: Stable
+
+**SHA-256**
+
+`DA042CDB956CCFAD24D228B6496307D6ACD24147B6AF5F7FF9BA3511255CCCFF`
+
+[View release notes](https://github.com/nipunmondolz/fitbalance/releases/tag/v1.0.0)
+
+> Android may ask you to allow installation from the app used to open the APK because FitBalance is distributed directly rather than through Google Play.
+
 ## Highlights
 
 - **Bilingual UI:** Bangla and English across onboarding and core screens.
